@@ -65,24 +65,27 @@ export default class MessageHandler {
 
   // 处理B站内容
   async handleBiliContent(biliContent, groupId, bot) {
-    try {
-      this.logger.info(`检测到B站内容: ${biliContent.data.type} - ${biliContent.data.id}`);
-      
-      // 生成图片
-      const result = await this.biliHandler.process(biliContent.data);
-      
-      if (result.success) {
+    this.logger.info(`检测到B站内容: ${biliContent.data.type} - ${biliContent.data.id}`);
+
+    // 生成图片
+    const result = await this.biliHandler.process(biliContent.data);
+
+    if (result.success) {
+      try {
         // 发送图片和原始链接
         const text = `检测到B站内容:\n${result.url}`;
         await bot.sendGroupMixedMessage(groupId, text, result.imagePath);
-        
         this.logger.info(`成功发送B站内容卡片到群 ${groupId}`);
-      } else {
-        await bot.sendGroupMessage(groupId, `解析B站内容失败: ${result.error}`);
+      } catch (error) {
+        this.logger.error('发送B站内容卡片失败:', error);
+        // 发送失败不影响主流程,已经记录日志
       }
-    } catch (error) {
-      this.logger.error('处理B站内容失败:', error);
-      await bot.sendGroupMessage(groupId, '处理B站内容时出现错误');
+    } else {
+      try {
+        await bot.sendGroupMessage(groupId, `解析B站内容失败: ${result.error}`);
+      } catch (error) {
+        this.logger.error('发送错误消息失败:', error);
+      }
     }
   }
 
