@@ -1,5 +1,6 @@
 import BiliApi from '../services/biliApi.js';
 import ImageGenerator from '../services/imageGenerator.js';
+import URLParser from '../utils/urlParser.js';
 import Logger from '../utils/logger.js';
 import path from 'path';
 import config from '../config.js';
@@ -9,9 +10,26 @@ export default class BiliHandler {
     this.biliApi = new BiliApi();
     this.imageGenerator = new ImageGenerator();
     this.logger = new Logger();
+    this.urlParser = new URLParser();
   }
 
   async process(biliData) {
+    if (biliData.type === 'short') {
+      try {
+        const realUrl = await this.biliApi.resolveShortLink(biliData.url);
+        const parsed = this.urlParser.extractBiliUrl(realUrl);
+        if (parsed && parsed.type !== 'short') {
+          return await this.process(parsed);
+        }
+        throw new Error('无法解析短链接目标地址');
+      } catch (e) {
+        return {
+          success: false,
+          error: e.message
+        };
+      }
+    }
+
     const { type, id } = biliData;
 
     try {

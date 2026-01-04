@@ -22,8 +22,8 @@ export default class ImageGenerator {
       const browser = await this.initBrowser();
       const page = await browser.newPage();
       
-      // 设置视口大小
-      await page.setViewport({ width: 800, height: 1200 });
+      // 初始设置一个基础视口
+      await page.setViewport({ width: 800, height: 800 });
 
       // 根据类型生成不同的HTML
       let html;
@@ -49,31 +49,33 @@ export default class ImageGenerator {
 
       await page.setContent(html);
       
-      // 等待图片加载
-      await page.waitForTimeout(1000);
+      // 等待加载
+      if (type === 'dynamic' || type === 'opus') {
+        // 动态需要等待图片和卡片加载
+        try {
+          await page.waitForSelector('.card', { timeout: 10000 });
+        } catch (e) {
+          // 忽略超时，继续尝试截图
+        }
+        await page.waitForTimeout(2000); // 额外等待图片加载
+      } else {
+        await page.waitForTimeout(1000);
+      }
+
+      // 获取页面实际高度 (自适应高度)
+      const bodyHeight = await page.evaluate(() => {
+        // 获取 body 的高度，确保包含 margin
+        return Math.ceil(document.body.scrollHeight);
+      });
+
+      // 调整视口高度以完整显示内容
+      await page.setViewport({ width: 800, height: bodyHeight });
 
       // 生成截图
       const filename = `bili_${type}_${Date.now()}.png`;
       const filepath = path.join(config.image.output.path, filename);
       
-      // 对于动态和专栏，使用 fullPage 以确保完整内容
-      const screenshotOptions = {
-        path: filepath,
-        fullPage: (type === 'dynamic' || type === 'article' || type === 'opus')
-      };
-      
-      if (!screenshotOptions.fullPage) {
-        screenshotOptions.clip = { x: 0, y: 0, width: 800, height: await this.getContentHeight(page) };
-      }
-      
-      if (type === 'dynamic') {
-        // 等待页面完全加载，包括图片
-        await page.waitForSelector('.bili-dyn-content__orig', { timeout: 10000 });
-        await page.waitForTimeout(2000); // 额外等待图片加载
-        await page.screenshot({ path: outputPath, fullPage: true });
-      } else {
-        await page.screenshot(screenshotOptions);
-      }
+      await page.screenshot({ path: filepath });
 
       await page.close();
 
@@ -103,7 +105,7 @@ export default class ImageGenerator {
     body { 
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       padding: 20px;
-      font-family: "Microsoft YaHei", Arial, sans-serif;
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Microsoft YaHei", Arial, sans-serif;
     }
     .card {
       background: white;
@@ -223,10 +225,19 @@ export default class ImageGenerator {
   }
 
   // 继续查看第2部分获取其他HTML生成方法...
-// 生成动态卡片HTML
+  // 生成动态卡片HTML
   generateDynamicHTML(data) {
-    const imagesHTML = data.images.slice(0, 3).map(img => 
-      `<img class="dynamic-img" src="${img}" />`
+    const imgCount = data.images.length;
+    // 根据图片数量选择显示模式
+    // 限制最多显示9张
+    const displayImages = data.images.slice(0, 9);
+    
+    let gridClass = 'grid-3'; // 默认3列
+    if (imgCount === 1) gridClass = 'grid-1';
+    else if (imgCount === 2 || imgCount === 4) gridClass = 'grid-2';
+    
+    const imagesHTML = displayImages.map(img => 
+      `<div class="img-container"><img class="dynamic-img" src="${img}" /></div>`
     ).join('');
 
     return `
@@ -239,7 +250,7 @@ export default class ImageGenerator {
     body { 
       background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       padding: 20px;
-      font-family: "Microsoft YaHei", Arial, sans-serif;
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Microsoft YaHei", Arial, sans-serif;
     }
     .card {
       background: white;
@@ -247,6 +258,7 @@ export default class ImageGenerator {
       padding: 24px;
       box-shadow: 0 10px 40px rgba(0,0,0,0.2);
       max-width: 760px;
+      min-height: 200px; /* 最小高度防止太小 */
     }
     .author-row {
       display: flex;
@@ -281,16 +293,30 @@ export default class ImageGenerator {
     }
     .images {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
       margin-bottom: 20px;
     }
+    .grid-1 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+    .img-container {
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+    }
     .dynamic-img {
       width: 100%;
-      height: auto;
-      object-fit: contain;
-      border-radius: 8px;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
+    /* 单图模式特殊处理：让长图完整显示 */
+    .grid-1 .dynamic-img {
+      object-fit: contain;
+      max-height: 800px; /* 限制最大高度 */
+    }
+
     .stats {
       display: flex;
       gap: 24px;
@@ -320,7 +346,7 @@ export default class ImageGenerator {
       </div>
     </div>
     <div class="content">${data.content || '(无文字内容)'}</div>
-    ${imagesHTML ? `<div class="images">${imagesHTML}</div>` : ''}
+    ${imagesHTML ? `<div class="images ${gridClass}">${imagesHTML}</div>` : ''}
     <div class="stats">
       <div class="stat-item">
         <span>转发</span>
@@ -339,7 +365,6 @@ export default class ImageGenerator {
 </body>
 </html>`;
   }
-
   // 生成专栏卡片HTML
   generateArticleHTML(data) {
     return `
@@ -352,7 +377,7 @@ export default class ImageGenerator {
     body { 
       background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
       padding: 20px;
-      font-family: "Microsoft YaHei", Arial, sans-serif;
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Microsoft YaHei", Arial, sans-serif;
     }
     .card {
       background: white;
@@ -473,7 +498,7 @@ export default class ImageGenerator {
     body { 
       background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
       padding: 20px;
-      font-family: "Microsoft YaHei", Arial, sans-serif;
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Microsoft YaHei", Arial, sans-serif;
     }
     .card {
       background: white;

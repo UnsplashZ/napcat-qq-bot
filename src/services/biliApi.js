@@ -95,6 +95,22 @@ export default class BiliApi {
 
       const item = response.data.data.item;
       const modules = item.modules;
+      const dynamic = modules.module_dynamic;
+
+      // 提取内容
+      let content = dynamic?.desc?.text || '';
+      // 提取图片
+      let images = dynamic?.major?.draw?.items?.map(img => img.src) || [];
+
+      // 如果是 Opus 类型 (专栏/图文)
+      if (dynamic?.major?.opus) {
+        if (!content) {
+          content = dynamic.major.opus.summary?.text || '';
+        }
+        if (images.length === 0 && dynamic.major.opus.pics) {
+          images = dynamic.major.opus.pics.map(pic => pic.url);
+        }
+      }
 
       return {
         type: 'opus',
@@ -102,8 +118,8 @@ export default class BiliApi {
         authorFace: modules.module_author.face,
         uid: modules.module_author.mid,
         pubTs: this.formatDate(modules.module_author.pub_ts),
-        content: modules.module_dynamic?.desc?.text || '',
-        images: modules.module_dynamic?.major?.draw?.items?.map(img => img.src) || [],
+        content: content,
+        images: images,
         forwardCount: this.formatNumber(modules.module_stat?.forward?.count || 0),
         likeCount: this.formatNumber(modules.module_stat?.like?.count || 0),
         replyCount: this.formatNumber(modules.module_stat?.reply?.count || 0)
@@ -235,5 +251,31 @@ export default class BiliApi {
       return (num / 10000).toFixed(1) + '万';
     }
     return num.toString();
+  }
+
+  // 解析短链接
+  async resolveShortLink(shortUrl) {
+    try {
+      // 禁止自动重定向，手动获取 location header
+      const response = await this.axios.get(shortUrl, {
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400
+      });
+      // 如果没有重定向，可能已经是最终地址
+      return response.headers.location || shortUrl;
+    } catch (error) {
+       // 如果是因为重定向过多(maxRedirects:0会抛错)或者3xx状态码
+       if (error.response && error.response.status >= 300 && error.response.status < 400) {
+           return error.response.headers.location;
+       }
+       // 尝试直接GET获取最终URL (axios默认跟随)
+       try {
+         const response = await this.axios.get(shortUrl);
+         return response.request.res.responseUrl || shortUrl;
+       } catch (e) {
+         this.logger.error('解析短链接失败:', e);
+         return shortUrl;
+       }
+    }
   }
 }

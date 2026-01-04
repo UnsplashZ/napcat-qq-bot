@@ -47,7 +47,7 @@ export default class URLParser {
                   jsonData.meta?.news?.jumpUrl ||
                   jsonData.prompt;
 
-      if (url && url.includes('bilibili.com')) {
+      if (url && (url.includes('bilibili.com') || url.includes('b23.tv'))) {
         return this.extractBiliUrl(url);
       }
 

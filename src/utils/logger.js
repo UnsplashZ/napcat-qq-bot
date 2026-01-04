@@ -36,7 +36,9 @@ export default class Logger {
     let msg = `[${timestamp}] [${levelStr}] ${message}`;
     
     if (data) {
-      if (typeof data === 'object') {
+      if (data instanceof Error) {
+        msg += '\n' + (data.stack || data.message);
+      } else if (typeof data === 'object') {
         msg += '\n' + JSON.stringify(data, null, 2);
       } else {
         msg += ' ' + data;
