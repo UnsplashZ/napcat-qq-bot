@@ -21,7 +21,13 @@ export default {
       apiKey: 'your-api-key', // 如果需要
       // API 请求配置
       timeout: 30000,
-      model: 'gpt-3.5-turbo' // 根据你的 API 调整
+      model: 'gpt-3.5-turbo', // 根据你的 API 调整
+      // 提示词 (system prompt)
+      systemPrompt: '你是一个友好的AI助手，请用中文回复。',
+      // 温度 (0-2, 越高越随机)
+      temperature: 0.7,
+      // 最大 token 数
+      maxTokens: 1000
     },
     // 管理员 QQ 列表
     admins: ['管理员QQ1', '管理员QQ2']
@@ -41,7 +47,8 @@ export default {
       videoInfo: 'https://api.bilibili.com/x/web-interface/view',
       dynamicInfo: 'https://api.bilibili.com/x/polymer/web-dynamic/v1/detail',
       userInfo: 'https://api.bilibili.com/x/space/acc/info',
-      articleInfo: 'https://api.bilibili.com/x/article/viewinfo'
+      articleInfo: 'https://api.bilibili.com/x/article/viewinfo',
+      opusInfo: 'https://api.bilibili.com/x/polymer/web-dynamic/v1/detail'
     }
   },
 

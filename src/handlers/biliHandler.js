@@ -35,6 +35,10 @@ export default class BiliHandler {
           contentData = await this.biliApi.getBangumiInfo(id);
           url = `https://www.bilibili.com/bangumi/play/${id}`;
           break;
+        case 'opus':
+          contentData = await this.biliApi.getOpusInfo(id);
+          url = `https://www.bilibili.com/opus/${id}`;
+          break;
         default:
           throw new Error(`未知的内容类型: ${type}`);
       }

@@ -82,6 +82,38 @@ export default class BiliApi {
     }
   }
 
+  // 获取 opus 信息 (动态的新格式)
+  async getOpusInfo(opusId) {
+    try {
+      const response = await this.axios.get(config.bilibili.api.opusInfo, {
+        params: { id: opusId }
+      });
+
+      if (response.data.code !== 0) {
+        throw new Error(response.data.message);
+      }
+
+      const item = response.data.data.item;
+      const modules = item.modules;
+
+      return {
+        type: 'opus',
+        author: modules.module_author.name,
+        authorFace: modules.module_author.face,
+        uid: modules.module_author.mid,
+        pubTs: this.formatDate(modules.module_author.pub_ts),
+        content: modules.module_dynamic?.desc?.text || '',
+        images: modules.module_dynamic?.major?.draw?.items?.map(img => img.src) || [],
+        forwardCount: this.formatNumber(modules.module_stat?.forward?.count || 0),
+        likeCount: this.formatNumber(modules.module_stat?.like?.count || 0),
+        replyCount: this.formatNumber(modules.module_stat?.reply?.count || 0)
+      };
+    } catch (error) {
+      this.logger.error('获取 opus 信息失败:', error);
+      throw error;
+    }
+  }
+
   // 获取专栏信息
   async getArticleInfo(cvid) {
     try {

@@ -18,14 +18,18 @@ export default class AIHandler {
         model: aiConfig.model,
         messages: [
           {
+            role: 'system',
+            content: aiConfig.systemPrompt || '你是一个友好的AI助手，请用中文回复。'
+          },
+          {
             role: 'user',
             content: message
           }
         ],
         // 如果需要会话历史
         // messages: this.getConversationHistory(groupId, message),
-        max_tokens: 1000,
-        temperature: 0.7
+        max_tokens: aiConfig.maxTokens || 1000,
+        temperature: aiConfig.temperature || 0.7
       };
 
       // 添加API Key (如果需要)

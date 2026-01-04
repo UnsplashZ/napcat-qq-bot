@@ -6,6 +6,7 @@ export default class URLParser {
     article: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/read\/cv(\d+)/i,
     bangumi: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/bangumi\/play\/(ss\d+|ep\d+)/i,
     live: /(?:https?:\/\/)?live\.bilibili\.com\/(\d+)/i,
+    opus: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/opus\/(\d+)/i,
     // 短链接
     shortLink: /(?:https?:\/\/)?b23\.tv\/([\w]+)/i
   };

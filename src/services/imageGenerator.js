@@ -40,6 +40,9 @@ export default class ImageGenerator {
         case 'bangumi':
           html = this.generateBangumiHTML(data);
           break;
+        case 'opus':
+          html = this.generateDynamicHTML(data); // opus 使用动态的模板
+          break;
         default:
           throw new Error(`未知类型: ${type}`);
       }
@@ -53,11 +56,17 @@ export default class ImageGenerator {
       const filename = `bili_${type}_${Date.now()}.png`;
       const filepath = path.join(config.image.output.path, filename);
       
-      await page.screenshot({
+      // 对于动态和专栏，使用 fullPage 以确保完整内容
+      const screenshotOptions = {
         path: filepath,
-        fullPage: false,
-        clip: { x: 0, y: 0, width: 800, height: await this.getContentHeight(page) }
-      });
+        fullPage: (type === 'dynamic' || type === 'article' || type === 'opus')
+      };
+      
+      if (!screenshotOptions.fullPage) {
+        screenshotOptions.clip = { x: 0, y: 0, width: 800, height: await this.getContentHeight(page) };
+      }
+      
+      await page.screenshot(screenshotOptions);
 
       await page.close();
 
