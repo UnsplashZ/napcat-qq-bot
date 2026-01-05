@@ -15,7 +15,7 @@ fi
 # 2. Install Python Dependencies
 echo "Installing Python dependencies..."
 source venv/bin/activate
-pip install bilibili-api-python
+pip install bilibili-api-python aiohttp
 deactivate
 
 # 3. Install Node.js Dependencies
