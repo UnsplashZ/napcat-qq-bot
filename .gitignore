@@ -18,11 +18,15 @@ __pycache__/
 
 # Environment & Secrets
 .env
+config.json
 cookies.json
 
 # Project Specific
 application.log
 subscriptions.json
+
+# AI tools
+.claude/
 
 # OS
 .DS_Store
@@ -35,3 +39,9 @@ temp/
 
 # Logs
 logs/
+
+# Fonts
+fonts/
+
+# Test
+test*
