@@ -41,35 +41,36 @@ async def get_bangumi_info(season_id):
 
 async def get_login_url():
     try:
-        # Generate QR Code info
-        # returns (url, qrcode_key)
-        url, qrcode_key = login.get_qrcode_url()
-        return {"status": "success", "data": {"url": url, "key": qrcode_key}}
+        # 使用 QrCodeLogin 类获取二维码
+        q = login.QrCodeLogin(login.QrCodeLoginChannel.WEB)
+        await q.generate_qrcode()
+        return {"status": "success", "data": {
+            "url": q._QrCodeLogin__qr_link, 
+            "key": q._QrCodeLogin__qr_key
+        }}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 async def poll_login(qrcode_key):
     try:
-        # Check status
-        # returns (status_code, cookies_or_url)
-        # status_code: 0=success, 86101=unscanned, 86090=scanned but not confirmed, 86038=expired
-        status, data = await login.login_with_key(qrcode_key)
+        # 实例化并手动设置 key 以支持轮询
+        q = login.QrCodeLogin(login.QrCodeLoginChannel.WEB)
+        q._QrCodeLogin__qr_key = qrcode_key
         
-        if status == 0:
-            # Success, data is credential object or cookies dict depending on version
-            # In recent versions, login_with_key returns Credential object on success if used directly?
-            # Actually checking docs/source is best. 
-            # Assuming 'data' is the credential object or we can construct it.
-            # If it returns cookies dict:
-            if isinstance(data, dict):
-                credential = Credential(sessdata=data['SESSDATA'], bili_jct=data['bili_jct'], buvid3=data['buvid3'])
-            else:
-                credential = data
-            
+        event = await q.check_state()
+        
+        if event == login.QrCodeLoginEvents.DONE:
+            credential = q.get_credential()
             save_credential(credential)
-            return {"status": "success", "message": "Login successful"}
+            return {"status": "success", "message": "登录成功"}
+        elif event == login.QrCodeLoginEvents.SCAN:
+            return {"status": "pending", "code": 86101, "message": "等待扫码"}
+        elif event == login.QrCodeLoginEvents.CONF:
+            return {"status": "pending", "code": 86090, "message": "已扫码，请在手机上确认"}
+        elif event == login.QrCodeLoginEvents.TIMEOUT:
+            return {"status": "error", "code": 86038, "message": "二维码已过期"}
         else:
-            return {"status": "pending", "code": status, "message": "Waiting for scan or confirmation"}
+            return {"status": "error", "message": "未知状态"}
             
     except Exception as e:
         return {"status": "error", "message": str(e)}
