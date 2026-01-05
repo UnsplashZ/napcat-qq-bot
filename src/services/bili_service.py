@@ -1,7 +1,10 @@
 import sys
 import json
 import asyncio
-from bilibili_api import video, bangumi, user, Credential
+import re
+import aiohttp
+from bs4 import BeautifulSoup
+from bilibili_api import video, bangumi, user, article, live, dynamic, Credential
 import bilibili_api.login_v2 as login
 
 # Load credentials from a file if they exist
@@ -33,9 +36,78 @@ async def get_video_info(bvid):
 
 async def get_bangumi_info(season_id):
     try:
-        b = bangumi.Bangumi(season_id=int(season_id), credential=load_credential())
-        info = await b.get_info()
-        return {"status": "success", "type": "bangumi", "data": info}
+        b = bangumi.Bangumi(int(season_id), credential=load_credential())
+        # overview contains the summary (evaluate) and basic info
+        info = await b.get_overview()
+        # Explicitly get stats to ensure accuracy (e.g. follow count)
+        stat = await b.get_stat()
+        
+        data = {
+            "title": info.get('title'),
+            "cover": info.get('cover'),
+            "desc": info.get('evaluate'),
+            "stat": stat, # Use the explicitly fetched stat
+            "new_ep": info.get('new_ep'),
+            "rating": info.get('rating')
+        }
+        return {"status": "success", "type": "bangumi", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+async def get_article_info(cvid):
+    try:
+        cvid_int = int(cvid.replace('cv', ''))
+        a = article.Article(cvid_int, credential=load_credential())
+        info = await a.get_info()
+        
+        # Try to get content for summary
+        summary = ""
+        try:
+            content = await a.fetch_content()
+            summary = re.sub('<[^<]+?>', '', content)
+        except Exception:
+            pass
+            
+        # Fallback scraping if summary is empty/failed
+        if not summary or len(summary) < 10:
+            try:
+                url = f"https://www.bilibili.com/read/cv{cvid_int}"
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, headers=headers) as resp:
+                        if resp.status == 200:
+                            html = await resp.text()
+                            soup = BeautifulSoup(html, 'html.parser')
+                            # Try specific holders first
+                            holder = soup.find(class_='article-holder') or soup.find(id='read-article-holder')
+                            if holder:
+                                summary = holder.get_text(separator='\n', strip=True)
+                            else:
+                                # Fallback to body text, removing scripts/styles
+                                for script in soup(["script", "style"]):
+                                    script.extract()
+                                summary = soup.get_text(separator='\n', strip=True)
+            except Exception as e:
+                summary = f"无法抓取正文: {str(e)}"
+
+        info['summary'] = summary[:2500] if summary else '点击查看详情'
+
+        # Map publish_time if missing (Article API varies)
+        if 'publish_time' not in info:
+            # Some APIs use ctime or ptime
+            info['publish_time'] = info.get('ctime', info.get('ptime', 0))
+
+        return {"status": "success", "type": "article", "data": info}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+async def get_live_room_info(room_id):
+    try:
+        l = live.LiveRoom(int(room_id), credential=load_credential())
+        info = await l.get_room_info()
+        return {"status": "success", "type": "live", "data": info}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -101,20 +173,6 @@ async def get_user_live(uid):
 
 async def get_dynamic_detail(dynamic_id):
     try:
-        # Note: Dynamic API usage might vary. 
-        # Using a general method to fetch detail if available, or just use the ID if we can't easily get single detail without context.
-        # But 'get_dynamic_detail' is usually what we want.
-        # Actually bilibili_api 15+ has 'dynamic' module.
-        from bilibili_api import dynamic
-        # d = dynamic.Dynamic(dynamic_id) # This might be for operations.
-        # To get info, we might need to search or use specific API.
-        # Let's try constructing a Dynamic object and getting info if method exists.
-        # If not, we can use 'user.get_dynamics' filtering, but that's inefficient.
-        # Let's assume we can just return basic info or use the 'get_dynamic_detail' if available in library.
-        # Checking docs... 'bilibili_api.dynamic.get_general_dynamic_info' might be it? 
-        # Or 'Dynamic(id).get_info()'?
-        
-        # Let's try:
         d = dynamic.Dynamic(int(dynamic_id), credential=load_credential())
         info = await d.get_info()
         return {"status": "success", "type": "dynamic", "data": info}
@@ -138,6 +196,16 @@ async def main():
         season_id = sys.argv[2]
         result = await get_bangumi_info(season_id)
         print(json.dumps(result, ensure_ascii=False))
+
+    elif command == "article":
+        cvid = sys.argv[2]
+        result = await get_article_info(cvid)
+        print(json.dumps(result, ensure_ascii=False))
+
+    elif command == "live_room":
+        room_id = sys.argv[2]
+        result = await get_live_room_info(room_id)
+        print(json.dumps(result, ensure_ascii=False))
         
     elif command == "login_url":
         result = await get_login_url()
@@ -158,7 +226,7 @@ async def main():
         result = await get_user_live(uid)
         print(json.dumps(result, ensure_ascii=False))
         
-    elif command == "dynamic_detail":
+    elif command == "dynamic_detail" or command == "opus":
         did = sys.argv[2]
         result = await get_dynamic_detail(did)
         print(json.dumps(result, ensure_ascii=False))

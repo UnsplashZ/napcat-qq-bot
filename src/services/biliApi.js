@@ -69,6 +69,18 @@ class BiliApi {
     async getDynamicInfo(dynamicId) {
         return this.runCommand('dynamic_detail', [dynamicId]);
     }
+
+    async getArticleInfo(cvid) {
+        return this.runCommand('article', [cvid]);
+    }
+
+    async getLiveRoomInfo(roomId) {
+        return this.runCommand('live_room', [roomId]);
+    }
+
+    async getOpusInfo(opusId) {
+        return this.runCommand('opus', [opusId]);
+    }
 }
 
 module.exports = new BiliApi();

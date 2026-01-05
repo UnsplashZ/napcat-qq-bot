@@ -4,6 +4,7 @@ const aiHandler = require('./aiHandler');
 const logger = require('../utils/logger');
 const QRCode = require('qrcode');
 const subscriptionService = require('../services/subscriptionService');
+const https = require('https');
 
 class MessageHandler {
     constructor() {
@@ -13,13 +14,70 @@ class MessageHandler {
         this.ssRegex = /play\/ss([0-9]+)/;
         // Regex for Dynamic (t.bilibili.com/xxxx)
         this.dynamicRegex = /t.bilibili.com\/([0-9]+)/;
+        // Regex for Article (read/cv)
+        this.articleRegex = /read\/cv([0-9]+)/;
+        // Regex for Live (live.bilibili.com/xxxx)
+        this.liveRegex = /live.bilibili.com\/([0-9]+)/;
+        // Regex for Opus (opus/xxxx)
+        this.opusRegex = /opus\/([0-9]+)/;
+        // Regex for short links
+        this.shortLinkRegex = /b23.tv\/([a-zA-Z0-9]+)/;
+    }
+
+    async expandUrl(shortUrl) {
+        return new Promise((resolve) => {
+            // Ensure protocol
+            if (!shortUrl.startsWith('http')) shortUrl = 'https://' + shortUrl;
+            
+            const req = https.request(shortUrl, { method: 'HEAD' }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    resolve(res.headers.location);
+                } else {
+                    resolve(shortUrl);
+                }
+            });
+            
+            req.on('error', (e) => {
+                logger.error('Error expanding URL:', e);
+                resolve(shortUrl);
+            });
+            
+            req.end();
+        });
     }
 
     async handleMessage(ws, messageData) {
         const message = messageData.message; 
-        const rawMessage = messageData.raw_message; 
+        let rawMessage = messageData.raw_message; 
         const userId = messageData.user_id;
         const groupId = messageData.group_id;
+
+        // Check for JSON message (Mini Program) and extract URL
+        const jsonMsg = message.find(m => m.type === 'json');
+        if (jsonMsg) {
+            try {
+                const jsonData = JSON.parse(jsonMsg.data.data);
+                // Common paths for URL in Bilibili Mini Program
+                const url = jsonData.meta?.detail_1?.qqdocurl || jsonData.meta?.detail_1?.url || jsonData.meta?.news?.jumpUrl;
+                if (url) {
+                    logger.info(`Extracted URL from JSON: ${url}`);
+                    rawMessage += " " + url; // Append to rawMessage for regex matching
+                }
+            } catch (e) {
+                logger.warn('Failed to parse JSON message:', e);
+            }
+        }
+
+        // Expand short links if present
+        if (this.shortLinkRegex.test(rawMessage)) {
+            const match = rawMessage.match(this.shortLinkRegex);
+            if (match) {
+                const shortUrl = match[0];
+                const expanded = await this.expandUrl(shortUrl);
+                logger.info(`Expanded ${shortUrl} to ${expanded}`);
+                rawMessage += " " + expanded;
+            }
+        }
         
         // Command: /sub <uid> <type>
         if (rawMessage.startsWith('/sub ')) {
@@ -63,6 +121,31 @@ class MessageHandler {
             } catch (e) {
                 logger.error('Login Error:', e);
             }
+            return;
+        }
+
+        // Command: /help
+        if (rawMessage.trim() === '/help') {
+            const helpText = [
+                '🤖 Bilibili 机器人帮助',
+                '------------------------',
+                '1. 链接解析支持：',
+                '   - 视频 (BV/av)',
+                '   - 番剧 (ss/ep)',
+                '   - 专栏 (cv)',
+                '   - 动态 (t.bilibili.com)',
+                '   - 直播 (live.bilibili.com)',
+                '   - 动态/图文 (opus)',
+                '   - 小程序/短链 (b23.tv)',
+                '',
+                '2. 指令列表：',
+                '   /login - 获取登录二维码',
+                '   /check <key> - 检查登录状态',
+                '   /sub <uid> <dynamic|live> - 订阅用户动态/直播',
+                '   /help - 显示此帮助信息'
+            ].join('\n');
+            
+            this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: helpText } }]);
             return;
         }
 
@@ -142,6 +225,67 @@ class MessageHandler {
                 }
             } catch (e) {
                 logger.error('Error processing Dynamic:', e);
+            }
+            return;
+        }
+
+        if (this.articleRegex.test(rawMessage)) {
+            const match = rawMessage.match(this.articleRegex);
+            const cvid = match[1];
+            logger.info(`Detected Bilibili Article: cv${cvid}`);
+
+            try {
+                const info = await biliApi.getArticleInfo(cvid);
+                if (info.status === 'success') {
+                    const base64Image = await imageGenerator.generatePreviewCard(info, 'article');
+                    this.sendGroupMessage(ws, groupId, [
+                        { type: 'image', data: { file: `base64://${base64Image}` } },
+                        { type: 'text', data: { text: `\n${info.data.title}\nhttps://www.bilibili.com/read/cv${cvid}` } }
+                    ]);
+                }
+            } catch (e) {
+                logger.error('Error processing Article:', e);
+            }
+            return;
+        }
+
+        if (this.liveRegex.test(rawMessage)) {
+            const match = rawMessage.match(this.liveRegex);
+            const roomId = match[1];
+            logger.info(`Detected Bilibili Live Room: ${roomId}`);
+
+            try {
+                const info = await biliApi.getLiveRoomInfo(roomId);
+                if (info.status === 'success') {
+                    const base64Image = await imageGenerator.generatePreviewCard(info, 'live');
+                    this.sendGroupMessage(ws, groupId, [
+                        { type: 'image', data: { file: `base64://${base64Image}` } },
+                        { type: 'text', data: { text: `\n${info.data.room_info?.title}\nhttps://live.bilibili.com/${roomId}` } }
+                    ]);
+                }
+            } catch (e) {
+                logger.error('Error processing Live Room:', e);
+            }
+            return;
+        }
+
+        if (this.opusRegex.test(rawMessage)) {
+            const match = rawMessage.match(this.opusRegex);
+            const opusId = match[1];
+            logger.info(`Detected Bilibili Opus: ${opusId}`);
+
+            try {
+                // Opus uses dynamic info
+                const info = await biliApi.getOpusInfo(opusId);
+                if (info.status === 'success') {
+                    const base64Image = await imageGenerator.generatePreviewCard(info, 'dynamic'); // Reuse dynamic card
+                    this.sendGroupMessage(ws, groupId, [
+                        { type: 'image', data: { file: `base64://${base64Image}` } },
+                        { type: 'text', data: { text: `\nhttps://www.bilibili.com/opus/${opusId}` } }
+                    ]);
+                }
+            } catch (e) {
+                logger.error('Error processing Opus:', e);
             }
             return;
         }
