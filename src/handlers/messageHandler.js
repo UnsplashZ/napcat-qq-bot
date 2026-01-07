@@ -28,7 +28,7 @@ class MessageHandler {
         // Regex for Media (mdxxxx)
         this.mediaRegex = /bangumi\/media\/md([0-9]+)/;
         // Regex for User (space.bilibili.com/xxxx)
-        this.userRegex = /space.bilibili.com\/([0-9]+)/;
+        this.userRegex = /(?:space\.bilibili\.com\/|(?:https?:\/\/)?[^/]*bilibili\.com\/space\/)([0-9]+)/;
         // Regex for short links
         this.shortLinkRegex = /b23.tv\/([a-zA-Z0-9]+)/;
 

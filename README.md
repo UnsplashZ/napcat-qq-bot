@@ -29,7 +29,7 @@
     *   **用户主页** (space.bilibili.com) - **全新升级**：展示用户获赞/播放/粉丝/关注数据，自动抓取并展示**最新一条动态**内容，支持签名展示与垂直布局。
     *   **Opus 图文** (opus)
     *   **直播间** (live.bilibili.com)
-    *   **小程序/短链** (b23.tv) - 自动还原 QQ 小程序分享链接
+    *   **小程序/短链** (b23.tv) - 自动还原到目标链接（支持 PC 与移动端域名）
 *   🖼️ **高颜值预览**：
     *   使用 Puppeteer 生成**小米风格**的长截图卡片（推荐搭配 MiSans 字体）。
     *   **智能配色**：自动提取装饰卡片重点色，动态调整粉丝编号文字颜色。
@@ -72,7 +72,7 @@
 | `ADMIN_QQ` | 管理员 QQ 号 (用于特权指令) | `123456789` |
 
 ### 2. 动态配置 (config.json)
-复制 `config.json.example` 为 `config.json`。这些配置支持热更新（通过 `/设置` 指令修改）：
+复制 `config/config.json.example` 为 `config/config.json`。这些配置支持热更新（通过 `/设置` 指令修改）：
 
 | 字段名 | 说明 | 默认值 |
 | :--- | :--- | :--- |
@@ -95,13 +95,13 @@ git clone <repository_url>
 cd napcat-qq-bot
 ```
 
-> **建议**：为了获得最佳的预览效果，建议手动下载 **MiSans** 字体文件，并将其放置在项目根目录下的 `fonts/mi/` 文件夹中（ 建议加入全部的ttf字体以获取最佳视觉效果 ）。若未提供，将默认使用 Noto CJK 字体。
+> **建议**：为了获得最佳的预览效果，建议手动下载 **MiSans** 字体文件，并将其放置在项目根目录下的 `fonts/mi/` 文件夹中（ 建议加入全部的ttf字体 ）。若未提供，将默认使用 Noto CJK 字体。
 
 ### 3. 配置环境
 ```bash
-cp .env.example .env
+cp config/.env.example config/.env
 # 编辑配置文件，填入你的 NapCat 地址和 AI Key
-nano .env
+nano config/.env
 ```
 > **注意**：如果 NapCat 也在 Docker 中运行，`WS_URL` 请填写宿主机 IP 或使用 Docker 网络别名。本项目默认使用 `network_mode: "host"`，因此可以直接使用 `localhost:3001` (Linux环境)。
 

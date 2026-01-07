@@ -47,6 +47,7 @@ class ImageGenerator {
     async generatePreviewCard(data, type) {
         await this.init();
         const page = await this.browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
         // 根据内容类型动态决定宽度
         let baseWidth = 900;

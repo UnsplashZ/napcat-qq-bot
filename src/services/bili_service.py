@@ -11,7 +11,7 @@ from PIL import Image
 import colorsys
 
 # Load credentials from a file if they exist
-CREDENTIAL_FILE = 'cookies.json'
+CREDENTIAL_FILE = 'data/cookies.json'
 
 def load_credential():
     try:

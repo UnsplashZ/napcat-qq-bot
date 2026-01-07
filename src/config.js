@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const dotenv = require('dotenv');
 
-const CONFIG_PATH = path.join(__dirname, '../config.json');
+const CONFIG_DIR = path.join(__dirname, '../config');
+const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
+dotenv.config({ path: path.join(CONFIG_DIR, '.env') });
 
 let configData = {};
 if (fs.existsSync(CONFIG_PATH)) {

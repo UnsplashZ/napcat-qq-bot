@@ -6,7 +6,7 @@ const logger = require('../utils/logger');
 const https = require('https');
 const config = require('../config');
 
-const SUBS_FILE = path.join(__dirname, '../../subscriptions.json');
+const SUBS_FILE = path.join(__dirname, '../../data/subscriptions.json');
 
 class SubscriptionService {
     constructor() {
@@ -32,6 +32,10 @@ class SubscriptionService {
 
     saveSubscriptions() {
         try {
+            const dir = path.dirname(SUBS_FILE);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
             fs.writeFileSync(SUBS_FILE, JSON.stringify(this.subscriptions, null, 2));
         } catch (e) {
             logger.error('Failed to save subscriptions:', e);

@@ -34,18 +34,17 @@ fi
 echo "Setup complete!"
 echo "Initializing configuration files..."
 
-if [ ! -f ".env" ]; then
-    cp .env.example .env
-    echo "Created .env from example."
+if [ ! -f "config/.env" ]; then
+    cp config/.env.example config/.env
+    echo "Created config/.env from example."
 fi
 
-if [ ! -f "config.json" ]; then
-    cp config.json.example config.json
-    echo "Created config.json from example."
+if [ ! -f "config/config.json" ]; then
+    cp config/config.json.example config/config.json
+    echo "Created config/config.json from example."
 fi
 
-echo "To start the bot:"
-echo "1. Configure .env file (Connection & AI settings)"
-echo "2. Configure config.json (Blacklist & Groups)"
-echo "3. Run: npm start"
-
+echo "启动机器人: "
+echo "1. 编辑 config/.env (连接与 AI 配置) "
+echo "2. 编辑 config/config.json (黑名单与群组等) "
+echo "3. 运行: npm start"
