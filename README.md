@@ -1,8 +1,8 @@
-# NapCat Bilibili & AI Bot
+# Bili QQ Bot
 
 ![License](https://img.shields.io/badge/license-ISC-blue.svg) ![Docker](https://img.shields.io/badge/docker-ready-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-%3E%3D3.8-yellow)
 
-基于 [NapCat](https://github.com/NapNeko/NapCatQQ) 框架开发的 Bilibili 全能助手 QQ 机器人。它不仅能智能识别并解析 B 站几乎所有类型的链接，还能为这些内容生成极具美感、布局紧凑的高清长预览卡片。同时，内置了基于 OpenAI 接口的 AI 智能聊天功能。
+基于 [NapCat](https://github.com/NapNeko/NapCatQQ) 框架开发的 Bilibili 全能助手 QQ 机器人。它不能智能识别并解析 B 站几乎所有类型的链接，并为这些内容生成简洁优雅的高清长预览卡片。同时，内置了基于 OpenAI 接口的 AI 智能聊天功能。
 
 ## 目录
 
@@ -31,15 +31,15 @@
     *   **直播间** (live.bilibili.com)
     *   **小程序/短链** (b23.tv) - 自动还原到目标链接（支持 PC 与移动端域名）
 *   🖼️ **高颜值预览**：
-    *   使用 Puppeteer 生成**小米风格**的长截图卡片（推荐搭配 MiSans 字体）。
+    *   使用 Puppeteer 生成精美的长截图卡片（推荐搭配 MiSans 字体）。
     *   **智能配色**：自动提取装饰卡片重点色，动态调整粉丝编号文字颜色。
     *   支持 **SVG 矢量图标**，无乱码，视觉统一。
     *   智能布局：自适应单图/多图，自动提取封面颜色背景，类型标签悬浮显示。
 *   🤖 **智能 AI 对话**：
     *   支持自定义回复概率 (随机插话) 与 `@机器人` 触发。
     *   支持自定义系统提示词 (System Prompt) 设定人设。
-*   📡 **订阅推送**：内置订阅系统，可实时追踪 UP 主动态与直播状态。
-*   🐳 **Docker 化部署**：一键打包部署，内置 **Noto CJK (思源)** 与 **Emoji** 字体，支持挂载 **MiSans** 字体，完美解决 Linux 环境乱码问题。
+*   📡 **订阅推送**：内置订阅系统，可实时追踪 UP 主动态与直播、番剧更新。
+*   🐳 **Docker 化部署**：一键打包部署，默认内置 **MiSans (小米)** 、**Noto CJK (思源)** 与 **Emoji** 字体
 
 ## 预览效果
 
@@ -84,66 +84,81 @@
 
 ## 快速部署 (Docker)
 
-这是最简单、最稳定的部署方式，无需担心 Node/Python 版本或字体缺失问题。
+这是最简单、最稳定的部署方式，推荐直接使用线上镜像。
 
 ### 1. 前置准备
-请确保你已经部署并运行了 [NapCatQQ](https://github.com/NapNeko/NapCatQQ)，并开启了 **正向 WebSocket 服务** (默认端口 3001)。
+- 部署并运行 [NapCatQQ](https://github.com/NapNeko/NapCatQQ)，并开启 **正向 WebSocket 服务** (默认端口 3001)
+- 准备本项目的配置目录 `config/`，填写 `.env` 与 `config.json`（参考下文配置说明）
 
 ### 2. 获取项目
 ```bash
 git clone <repository_url>
-cd napcat-qq-bot
+cd bili-qq-bot
 ```
 
-> **建议**：为了获得最佳的预览效果，建议手动下载 **MiSans** 字体文件，并将其放置在项目根目录下的 `fonts/mi/` 文件夹中（ 建议加入全部的ttf字体 ）。若未提供，将默认使用 Noto CJK 字体。
+> 建议：如果准备本地打包部署，建议手动下载 **MiSans** 字体文件，并将其放置在项目根目录下的 `fonts/mi/` 文件夹中，以获得最佳的视觉效果。若未提供，将默认使用 Noto CJK 字体。
 
-### 3. 配置环境
+### 3. 使用线上镜像部署
+默认的 `docker-compose.yml` 已配置为线上镜像：
+```yaml
+services:
+  bili-bot:
+    image: unsplash/bili-qq-bot:lastest
+    container_name: bili-qq-bot
+    restart: always
+    network_mode: "host"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - /root/napcat-data/QQ:/root/napcat-data/QQ
+    environment:
+      - TZ=Asia/Shanghai
+```
+启动：
 ```bash
-cp config/.env.example config/.env
-# 编辑配置文件，填入你的 NapCat 地址和 AI Key
-nano config/.env
+docker-compose up -d
+docker-compose logs -f
 ```
-> **注意**：如果 NapCat 也在 Docker 中运行，`WS_URL` 请填写宿主机 IP 或使用 Docker 网络别名。本项目默认使用 `network_mode: "host"`，因此可以直接使用 `localhost:3001` (Linux环境)。
+> 注意：如果 NapCat 也在 Docker 中运行，`WS_URL` 请填写宿主机 IP 或使用 Docker 网络别名。本项目默认使用 `network_mode: "host"`，因此可以直接使用 `localhost:3001` (Linux 环境)。
 
 ### 4. 目录映射 (关键)
-为了确保机器人生成的图片能被 NapCat 发送，NapCat 需要能访问到图片的临时目录，或者通过 Base64 发送。
-*   **方式一 (推荐 - 性能更好)**: 检查 `docker-compose.yml` 中的 `volumes` 部分，确保数据持久化映射。
-*   **方式二 (方便 - 无需映射)**: 在 `.env` 中设置 `USE_BASE64_SEND=true`，即可直接发送 Base64 数据，无需配置目录映射。
+为了确保机器人生成的图片能被 NapCat 发送，NapCat 需要能访问图片的临时目录，或通过 Base64 发送：
+- 默认：使用 `docker-compose.yml` 中的 `volumes` 映射确保数据与临时目录可访问
+- 可选：在 `.env` 中设置 `USE_BASE64_SEND=true`，直接发送 Base64 数据，无需目录映射
 
-### 5. 启动容器
+### 5. 使用本地打包镜像（可选）
+如需本地构建镜像，编辑 `docker-compose.yml`：
+1) 注释掉 `image: unsplash/bili-qq-bot`
+2) 取消注释 `build: .`
+3) 执行：
 ```bash
 docker-compose up -d --build
 ```
-查看日志：
-```bash
-docker-compose logs -f
-```
+其余配置与日志查看与线上镜像相同。
 
-## 本地开发 (源码)
+## npm 运行方法
 
-如果你想进行二次开发，可以在本地运行。
+本项目也支持直接通过 npm 运行。
 
 ### 环境要求
-*   **Node.js** (v18+)
-*   **Python** (v3.8+)
-*   **Chrome/Chromium** (Puppeteer 依赖)
+- Node.js (v18+)
+- Python (v3.8+) 并安装 `bilibili-api-python`（供 `bili_service.py` 调用）
+- Chrome/Chromium（Puppeteer 依赖）
 
 ### 安装与运行
+```bash
+# 安装 Node 依赖
+npm install
 
-1.  **安装依赖**
-    ```bash
-    # 脚本会自动创建 Python 虚拟环境并安装 npm 依赖
-    chmod +x setup.sh
-    ./setup.sh
-    ```
+# 配置变量，填入 NapCat 地址和 AI Key 等
+cp config/.env.example config/.env
+nano config/.env
 
-2.  **配置变量**
-    参照上方配置说明修改 `.env` 文件。
-
-3.  **启动机器人**
-    ```bash
-    npm start
-    ```
+# 运行
+npm start
+```
+> 提示：如果使用 Python 虚拟环境，请在 `.env` 中设置 `PYTHON_PATH` 指向你的虚拟环境解释器（例如 `venv/bin/python`）。
 
 ## 指令列表
 
@@ -154,8 +169,10 @@ docker-compose logs -f
 | `/菜单` / `/帮助` | 查看帮助菜单 | `/菜单` |
 | `/登录` | 获取 B 站登录二维码 (管理员) | `/登录` |
 | `/验证 <key>` | 扫码后验证登录状态 (管理员) | `/验证 8a7c...` |
-| `/订阅 <uid> <动态\|直播>` | 订阅 UP 主动态或直播 | `/订阅 123456 动态` |
-| `/取消订阅 <uid> <动态\|直播>` | 取消订阅 | `/取消订阅 123456 动态` |
+| `/订阅用户 <uid>` | 订阅用户（动态+直播） | `/订阅用户 123456` |
+| `/取消订阅用户 <uid>` | 取消用户订阅 | `/取消订阅用户 123456` |
+| `/订阅番剧 <season_id>` | 订阅番剧新剧集更新 | `/订阅番剧 3068` |
+| `/取消订阅番剧 <season_id>` | 取消番剧订阅 | `/取消订阅番剧 3068` |
 | `/订阅列表` | 查看本群订阅列表 | `/订阅列表` |
 | `/查询订阅 <uid>` | 立即检查某用户动态 | `/查询订阅 123456` |
 | `/清理上下文` | 清理当前群组的 AI 对话记忆 | `/清理上下文` |
@@ -183,6 +200,7 @@ docker-compose logs -f
 
 - [ ] **转发视频动态解析优化**：提升对转发类动态中嵌套视频内容的识别与展示效果。
 - [ ] **抖音/小红书支持**：扩展解析能力，支持抖音、小红书等平台的链接解析与卡片生成。
+- [ ] **setup.sh 一键安装脚本**：编辑配置、安装环境、打包镜像、生成 compose、启动并输出日志
 
 ## 致谢 (Acknowledgments)
 

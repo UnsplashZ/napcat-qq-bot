@@ -312,16 +312,27 @@ class ImageGenerator {
                 }
 
                 .title {
-                    font-size: 36px;
+                    font-size: 46px;
                     font-weight: 700;
                     margin-bottom: 16px;
                     color: #18191c;
                     line-height: 1.5;
                     letter-spacing: 0.5px;
                 }
+                .status-line {
+                    margin-top: 8px;
+                    margin-bottom: 12px;
+                    font-size: 22px;
+                    color: #555;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                }
+                .status-prefix { white-space: nowrap; }
+                .status-meta { white-space: nowrap; }
 
                 .text-content {
-                    font-size: 26px;
+                    font-size: 30px;
                     color: #333;
                     line-height: 1.75;
                     margin-top: 20px;
@@ -381,7 +392,7 @@ class ImageGenerator {
                 .stats {
                     display: flex;
                     gap: 28px;
-                    font-size: 24px;
+                    font-size: 28px;
                     color: #8a8f99;
                     align-items: center;
                     margin-bottom: 12px;
@@ -398,12 +409,13 @@ class ImageGenerator {
                     gap: 10px;
                     font-weight: 600;
                     color: #666;
+                    white-space: nowrap;
                 }
 
                 .stat-item svg {
                     fill: #8a8f99;
-                    width: 28px;
-                    height: 28px;
+                    width: 32px;
+                    height: 32px;
                 }
 
                 .globe-icon {
@@ -544,35 +556,56 @@ class ImageGenerator {
         // ---------------- BANGUMI ----------------
         else if (type === 'bangumi') {
             const info = data.data;
-            // Format duration (in seconds) to MM:SS or HH:MM:SS format
-            const formatDuration = (seconds) => {
-                if (!seconds) return '';
-                const h = Math.floor(seconds / 3600);
-                const m = Math.floor((seconds % 3600) / 60);
-                const s = Math.floor(seconds % 60);
+            
+            // Format publish info
+            const releaseDate = info.publish?.release_date_show || '未知';
+            const isFinish = info.publish?.is_finish === 1;
+            const seasonType = info.season_type;
+            const typeDesc = info.type_desc || '';
+            const stylesArr = info.styles || [];
+            const isMovieOrDoc = (seasonType === 2 || seasonType === 3) 
+                || stylesArr.includes('电影') || stylesArr.includes('纪录片')
+                || /电影|纪录/.test(typeDesc);
+            
+            let statusText = '';
+            const styles = info.styles || [];
+            const areas = info.areas || [];
+            const areaStr = areas.length > 0 ? areas.map(a => a.name).join('/') : '';
+            const stylesStr = styles.length > 0 ? styles.join('/') : '';
+            const metaSuffix = `${areaStr}${stylesStr ? (areaStr ? ' ' + stylesStr : stylesStr) : ''}`.trim();
 
-                if (h > 0) {
-                    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-                } else {
-                    return `${m}:${s.toString().padStart(2, '0')}`;
+            if (isFinish) {
+                const epDesc = (info.new_ep?.desc || '').replace(/,\s*/g, ' ');
+                statusText = isMovieOrDoc
+                    ? `${releaseDate}开播`
+                    : `${releaseDate}开播 ${epDesc}`;
+            } else {
+                const pubTime = info.publish?.pub_time || '';
+                let updateSchedule = '';
+                if (pubTime) {
+                    const dateStr = pubTime.replace(' ', 'T');
+                    const date = new Date(dateStr);
+                    if (!isNaN(date.getTime())) {
+                        const days = ['日', '一', '二', '三', '四', '五', '六'];
+                        const weekday = days[date.getDay()];
+                        const time = pubTime.split(' ')[1].substring(0, 5);
+                        updateSchedule = `每周${weekday} ${time}更新`;
+                    }
                 }
-            };
-
-            // For bangumi, we might have duration per episode in new_ep or other fields
-            const durationStr = info.new_ep?.duration ? ` • 时长: ${formatDuration(info.new_ep.duration)}` : '';
-
-            // Format styles (genres)
-            const stylesStr = info.styles && info.styles.length > 0 ? ` | 风格: ${info.styles.slice(0, 3).join(', ')}` : '';
-
-            // Format areas (regions)
-            const areasStr = info.areas && info.areas.length > 0 ? ` | 地区: ${info.areas.map(area => area.name).slice(0, 2).join(', ')}` : '';
-
-            // Format publish status
-            const isPublished = info.publish?.is_started ? '已开播' : '未开播';
-            const publishStatus = ` | 状态: ${isPublished}`;
-
-            // Format episode info
-            const episodeInfo = info.new_ep?.index_show || info.series?.series_name || '';
+                let epUpdateText = '';
+                if (!isMovieOrDoc) {
+                    const epTitle = info.new_ep?.title || info.new_ep?.index_show || '';
+                    if (epTitle) {
+                        const epNumber = parseInt(epTitle, 10);
+                        if (!isNaN(epNumber)) {
+                            epUpdateText = `更新至第${epNumber}集`;
+                        }
+                    }
+                }
+                statusText = isMovieOrDoc
+                    ? `${releaseDate}开播`
+                    : `${releaseDate}开播 连载中${epUpdateText ? ' ' + epUpdateText : ''}${updateSchedule ? ' ' + updateSchedule : ''}`;
+            }
 
             htmlContent += `
                 <div class="cover-container">
@@ -580,17 +613,15 @@ class ImageGenerator {
                 </div>
                 <div class="content">
                     <div class="title">${info.title}</div>
-                    <div style="margin-top: 8px; margin-bottom: 12px; font-size: 18px; color: #666; display: flex; flex-wrap: wrap; gap: 15px;">
-                        <span>开播: ${info.publish?.pub_time_show || info.publish?.release_date_show || '未知'}</span>
-                        <span>${info.publish?.is_finish ? '已完结' : '连载中'}</span>
-                        <span>更新: ${info.new_ep?.desc || '未知'}</span>
+                    <div class="status-line">
+                        <span class="status-prefix">${statusText}</span>
+                        ${metaSuffix ? `<span class="status-meta">${metaSuffix}</span>` : ''}
                     </div>
                     <div class="stats">
                         <span class="stat-item">${ICONS.view} ${this.formatNumber(info.stat?.views)}</span>
                         <span class="stat-item">${ICONS.heart} ${this.formatNumber(info.stat?.follow)}</span>
                         <span class="stat-item">${ICONS.comment} ${this.formatNumber(info.stat?.danmakus)}</span>
                         <span class="stat-item">${ICONS.star} ${info.rating?.score || 'N/A'}分</span>
-                        <span class="stat-item">${ICONS.globe} ${info.areas && info.areas.length > 0 ? info.areas.map(area => area.name).slice(0, 2).join(', ') : '未知'}</span>
                     </div>
                     <div class="text-content">${info.desc || ''}</div>
                 </div>
@@ -867,6 +898,8 @@ class ImageGenerator {
             const face = info.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg';
             const name = info.name || 'Unknown';
             const sign = info.sign || '';
+            const pendant = info.pendant || {};
+            const pendantImage = pendant.image || '';
             const follower = info.relation ? info.relation.follower : 0;
             const following = info.relation ? info.relation.following : 0;
             const level = info.level || 0;
@@ -1212,20 +1245,28 @@ class ImageGenerator {
                         <div class="section-title">指令列表</div>
                         <div class="cmd-list">
                             <div class="cmd-item">
-                                <span class="cmd-code">/订阅 &lt;uid&gt; &lt;动态|直播&gt;</span>
-                                <span class="cmd-desc">订阅 UP 主动态或直播</span>
+                                <span class="cmd-code">/订阅用户 &lt;uid&gt;</span>
+                                <span class="cmd-desc">订阅用户（动态+直播）</span>
                             </div>
                             <div class="cmd-item">
-                                <span class="cmd-code">/取消订阅 &lt;uid&gt; &lt;动态|直播&gt;</span>
-                                <span class="cmd-desc">取消订阅</span>
+                                <span class="cmd-code">/取消订阅用户 &lt;uid&gt;</span>
+                                <span class="cmd-desc">取消用户订阅</span>
                             </div>
                             <div class="cmd-item">
                                 <span class="cmd-code">/订阅列表</span>
-                                <span class="cmd-desc">查看本群订阅列表</span>
+                                <span class="cmd-desc">查看本群分类订阅列表</span>
                             </div>
                             <div class="cmd-item">
                                 <span class="cmd-code">/查询订阅 &lt;uid&gt;</span>
                                 <span class="cmd-desc">立即检查某用户动态</span>
+                            </div>
+                            <div class="cmd-item">
+                                <span class="cmd-code">/订阅番剧 &lt;season_id&gt;</span>
+                                <span class="cmd-desc">订阅番剧新剧集更新</span>
+                            </div>
+                            <div class="cmd-item">
+                                <span class="cmd-code">/取消订阅番剧 &lt;season_id&gt;</span>
+                                <span class="cmd-desc">取消番剧订阅</span>
                             </div>
                             <div class="cmd-item">
                                 <span class="cmd-code">/清理上下文</span>
@@ -1284,7 +1325,10 @@ class ImageGenerator {
 
     formatNumber(num) {
         if (!num) return '0';
-        if (num > 10000) {
+        if (num >= 100000000) {
+            return (num / 100000000).toFixed(2) + '亿';
+        }
+        if (num >= 10000) {
             return (num / 10000).toFixed(1) + '万';
         }
         return num.toString();

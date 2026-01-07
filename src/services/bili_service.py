@@ -600,6 +600,7 @@ async def get_user_info(uid):
             "name": user_info.get('name', ''),
             "level": user_info.get('level', 0),
             "face": user_info.get('face', ''),
+            "pendant": user_info.get('pendant', {}),
             "sign": user_info.get('sign', ''),
             "vip": user_info.get('vip', {}),
             "fans_medal": user_info.get('fans_medal', {}),

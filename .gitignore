@@ -46,3 +46,6 @@ fonts/*
 
 # Test
 test*
+
+docs/DOCKER_RELEASE.md
+scripts/build-docker.sh

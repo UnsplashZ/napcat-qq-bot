@@ -10,7 +10,11 @@ const SUBS_FILE = path.join(__dirname, '../../data/subscriptions.json');
 
 class SubscriptionService {
     constructor() {
-        this.subscriptions = []; // { uid: string, type: 'live'|'dynamic', groupIds: string[], lastId: string }
+        // Backward-compat storage (legacy)
+        this.subscriptions = []; // legacy: { uid, type: 'live'|'dynamic', groupIds, lastId, lastTime }
+        // New architecture
+        this.userSubs = [];      // { uid, groupIds: string[], lastDynamicId?: string, lastDynamicTime?: number, lastLiveStatus?: '0'|'1' }
+        this.bangumiSubs = [];   // { seasonId: string, groupIds: string[], lastEpId?: string|number, lastEpTime?: number }
         this.ws = null;
         this.checkInterval = config.subscriptionCheckInterval * 1000; // 从配置读取并转换为毫秒
         this.loadSubscriptions();
@@ -23,7 +27,33 @@ class SubscriptionService {
     loadSubscriptions() {
         try {
             if (fs.existsSync(SUBS_FILE)) {
-                this.subscriptions = JSON.parse(fs.readFileSync(SUBS_FILE, 'utf8'));
+                const json = JSON.parse(fs.readFileSync(SUBS_FILE, 'utf8'));
+                if (Array.isArray(json)) {
+                    // legacy format, migrate to userSubs
+                    this.subscriptions = json;
+                    const map = new Map();
+                    for (const s of this.subscriptions) {
+                        const key = s.uid;
+                        if (!map.has(key)) {
+                            map.set(key, { uid: key, groupIds: [], lastDynamicId: null, lastDynamicTime: 0, lastLiveStatus: '0' });
+                        }
+                        const entry = map.get(key);
+                        s.groupIds.forEach(g => { if (!entry.groupIds.includes(g)) entry.groupIds.push(g); });
+                        if (s.type === 'dynamic') {
+                            if (s.lastId) entry.lastDynamicId = s.lastId;
+                            if (s.lastTime) entry.lastDynamicTime = s.lastTime;
+                        }
+                        if (s.type === 'live') {
+                            if (s.lastId) entry.lastLiveStatus = s.lastId;
+                        }
+                    }
+                    this.userSubs = Array.from(map.values());
+                    this.bangumiSubs = [];
+                } else {
+                    // new format
+                    this.userSubs = json.userSubs || [];
+                    this.bangumiSubs = json.bangumiSubs || [];
+                }
             }
         } catch (e) {
             logger.error('Failed to load subscriptions:', e);
@@ -36,54 +66,80 @@ class SubscriptionService {
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true });
             }
-            fs.writeFileSync(SUBS_FILE, JSON.stringify(this.subscriptions, null, 2));
+            const data = {
+                userSubs: this.userSubs,
+                bangumiSubs: this.bangumiSubs
+            };
+            fs.writeFileSync(SUBS_FILE, JSON.stringify(data, null, 2));
         } catch (e) {
             logger.error('Failed to save subscriptions:', e);
         }
     }
 
-    addSubscription(uid, groupId, type) {
-        let sub = this.subscriptions.find(s => s.uid === uid && s.type === type);
-        if (sub) {
-            if (!sub.groupIds.includes(groupId)) {
-                sub.groupIds.push(groupId);
-            }
-        } else {
-            // 初始化 lastTime 为 0，确保第一次检测时能正确处理
-            this.subscriptions.push({ uid, type, groupIds: [groupId], lastId: null, lastTime: 0 });
+    // New API: 用户订阅
+    addUserSubscription(uid, groupId) {
+        let sub = this.userSubs.find(s => s.uid === uid);
+        if (!sub) {
+            sub = { uid, groupIds: [groupId], lastDynamicId: null, lastDynamicTime: 0, lastLiveStatus: '0' };
+            this.userSubs.push(sub);
+        } else if (!sub.groupIds.includes(groupId)) {
+            sub.groupIds.push(groupId);
+        }
+        this.saveSubscriptions();
+        return true;
+    }
+
+    removeUserSubscription(uid, groupId) {
+        const sub = this.userSubs.find(s => s.uid === uid);
+        if (!sub) return false;
+        sub.groupIds = sub.groupIds.filter(id => id !== groupId);
+        if (sub.groupIds.length === 0) {
+            this.userSubs = this.userSubs.filter(s => s.uid !== uid);
+        }
+        this.saveSubscriptions();
+        return true;
+    }
+
+    // New API: 番剧订阅
+    addBangumiSubscription(seasonId, groupId) {
+        let sub = this.bangumiSubs.find(s => s.seasonId === seasonId);
+        if (!sub) {
+            sub = { seasonId, groupIds: [groupId], lastEpId: null, lastEpTime: 0 };
+            this.bangumiSubs.push(sub);
+        } else if (!sub.groupIds.includes(groupId)) {
+            sub.groupIds.push(groupId);
+        }
+        this.saveSubscriptions();
+        return true;
+    }
+
+    removeBangumiSubscription(seasonId, groupId) {
+        const sub = this.bangumiSubs.find(s => s.seasonId === seasonId);
+        if (!sub) return false;
+        sub.groupIds = sub.groupIds.filter(id => id !== groupId);
+        if (sub.groupIds.length === 0) {
+            this.bangumiSubs = this.bangumiSubs.filter(s => s.seasonId !== seasonId);
         }
         this.saveSubscriptions();
         return true;
     }
 
     getSubscriptionsByGroup(groupId) {
-        // 返回指定群组的订阅信息
-        return this.subscriptions.filter(sub => sub.groupIds.includes(groupId));
+        const users = this.userSubs.filter(s => s.groupIds.includes(groupId)).map(s => ({ type: 'user', uid: s.uid }));
+        const bangumis = this.bangumiSubs.filter(s => s.groupIds.includes(groupId)).map(s => ({ type: 'bangumi', seasonId: s.seasonId }));
+        return [...users, ...bangumis];
     }
 
+    // legacy remove for backward compatibility
     removeSubscription(uid, groupId, type) {
-        const subIndex = this.subscriptions.findIndex(s => s.uid === uid && s.type === type);
-        if (subIndex !== -1) {
-            const sub = this.subscriptions[subIndex];
-            // 从群组列表中移除指定群组
-            sub.groupIds = sub.groupIds.filter(id => id !== groupId);
-
-            // 如果该订阅没有群组了，则完全删除该订阅
-            if (sub.groupIds.length === 0) {
-                this.subscriptions.splice(subIndex, 1);
-            }
-
-            this.saveSubscriptions();
-            return true;
+        if (type === 'dynamic' || type === 'live') {
+            return this.removeUserSubscription(uid, groupId);
         }
         return false;
     }
 
     getTypeName(type) {
-        const typeNames = {
-            'dynamic': '动态',
-            'live': '直播'
-        };
+        const typeNames = { dynamic: '动态', live: '直播', user: '用户', bangumi: '番剧' };
         return typeNames[type] || type;
     }
 
@@ -108,21 +164,27 @@ class SubscriptionService {
     async checkAll() {
         if (!this.ws) return;
 
-        for (const sub of this.subscriptions) {
+        // 用户订阅：同时检查动态与直播
+        for (const sub of this.userSubs) {
             try {
-                if (sub.type === 'dynamic') {
-                    await this.checkDynamic(sub);
-                } else if (sub.type === 'live') {
-                    await this.checkLive(sub);
-                }
+                await this.checkUserDynamic(sub);
+                await this.checkUserLive(sub);
             } catch (e) {
-                logger.error(`Error checking subscription for ${sub.uid}:`, e);
+                logger.error(`Error checking user subscription for ${sub.uid}:`, e);
             }
         }
-        this.saveSubscriptions(); // Save state (lastId)
+        // 番剧订阅：检查更新剧集
+        for (const sub of this.bangumiSubs) {
+            try {
+                await this.checkBangumi(sub);
+            } catch (e) {
+                logger.error(`Error checking bangumi subscription for ${sub.seasonId}:`, e);
+            }
+        }
+        this.saveSubscriptions();
     }
 
-    async checkDynamic(sub, force = false) {
+    async checkUserDynamic(sub, force = false) {
         logger.info(`[CheckDynamic] Checking dynamic for UID: ${sub.uid}, Force: ${force}`);
         try {
             const res = await biliApi.getUserDynamic(sub.uid);
@@ -133,18 +195,18 @@ class SubscriptionService {
                 const dynamicTime = res.data.pub_ts || 0; // 获取动态发布时间戳
                 logger.info(`[CheckDynamic] Got dynamic ID: ${dynamicId}, Time: ${dynamicTime}, LastID: ${sub.lastId}, LastTime: ${sub.lastTime}`);
 
-                // 确保 sub.lastTime 存在
-                if (!sub.lastTime) sub.lastTime = 0;
+                // 确保 sub.lastDynamicTime 存在
+                if (!sub.lastDynamicTime) sub.lastDynamicTime = 0;
 
                 // 核心逻辑：ID 变化 且 时间比上次更新
                 // 如果 lastId 为空（首次），直接更新状态不推送，或者根据需求推送
                 // 这里逻辑：首次运行只记录状态，不推送（避免刷屏）
-                if (sub.lastId || force) {
-                    if (sub.lastId !== dynamicId || force) {
+                if (sub.lastDynamicId || force) {
+                    if (sub.lastDynamicId !== dynamicId || force) {
                         // 只有当新动态的时间 晚于 记录的时间时，才推送
                         // 这样可以防止：UP主删了最新动态，获取到的是旧动态（时间较早），从而避免重复推送旧动态
                         // force 模式下忽略时间检查
-                        if (dynamicTime > sub.lastTime || force) {
+                        if (dynamicTime > sub.lastDynamicTime || force) {
                             logger.info(`[CheckDynamic] New dynamic detected, generating image...`);
                              // New dynamic found - get dynamic details and generate image
                             try {
@@ -160,8 +222,21 @@ class SubscriptionService {
                                     const base64Image = await imageGenerator.generatePreviewCard(dynamicDetail, 'dynamic');
                                     logger.info(`[CheckDynamic] Preview card generated successfully, sending to groups...`);
 
+                                    const modules = res.data.modules || {};
+                                    const module_author = modules.module_author || {};
+                                    const module_dynamic = modules.module_dynamic || {};
+                                    const authorName = module_author.name || sub.uid;
+                                    const pubTime = module_author.pub_time || '';
+                                    const isForward = !!res.data.orig;
+                                    const eventType = isForward ? '转发' : '动态';
+                                    let summary = '';
+                                    if (module_dynamic.desc && module_dynamic.desc.text) summary = module_dynamic.desc.text;
+                                    else if (module_dynamic.major?.opus?.title) summary = module_dynamic.major.opus.title;
+                                    summary = (summary || '').slice(0, 80);
+
                                     // Send image and link to groups
                                     this.notifyGroups(sub.groupIds, [
+                                        { type: 'text', data: { text: `[${eventType}] ${authorName} · ${pubTime}\n${summary}` } },
                                         { type: 'image', data: { file: `base64://${base64Image}` } },
                                         { type: 'text', data: { text: `用户 ${sub.uid} 发布了新动态: https://t.bilibili.com/${dynamicId}` } }
                                     ]);
@@ -178,7 +253,7 @@ class SubscriptionService {
                                 this.notifyGroups(sub.groupIds, `用户 ${sub.uid} 发布了新动态: https://t.bilibili.com/${dynamicId} (图片生成失败)`);
                             }
                         } else {
-                            logger.info(`[CheckDynamic] Ignored old dynamic for ${sub.uid}: ID=${dynamicId}, Time=${dynamicTime} <= LastTime=${sub.lastTime}`);
+                            logger.info(`[CheckDynamic] Ignored old dynamic for ${sub.uid}: ID=${dynamicId}, Time=${dynamicTime} <= LastTime=${sub.lastDynamicTime}`);
                         }
                     } else {
                         logger.info(`[CheckDynamic] No new dynamic, ID unchanged: ${dynamicId}`);
@@ -192,9 +267,9 @@ class SubscriptionService {
                 // lastId 变成了旧 ID，lastTime 变成了旧时间。
                 // 下次如果 UP 主发了新动态，时间肯定比旧时间晚，能正常推送。
                 if (!force) {
-                    sub.lastId = dynamicId;
-                    sub.lastTime = dynamicTime;
-                    logger.info(`[CheckDynamic] Updated state: LastID=${sub.lastId}, LastTime=${sub.lastTime}`);
+                    sub.lastDynamicId = dynamicId;
+                    sub.lastDynamicTime = dynamicTime;
+                    logger.info(`[CheckDynamic] Updated state: LastDynamicID=${sub.lastDynamicId}, LastDynamicTime=${sub.lastDynamicTime}`);
                 }
             } else {
                 logger.error(`[CheckDynamic] Failed to get dynamic for UID ${sub.uid}: status=${res.status}, message=${res.message || 'N/A'}`);
@@ -209,16 +284,13 @@ class SubscriptionService {
         logger.info(`[CheckSubscriptionNow] Received request for UID/DynamicID: ${uid}, GroupID: ${groupId}`);
 
         // 首先尝试作为UID查找订阅
-        let sub = this.subscriptions.find(s => s.uid === uid && s.type === 'dynamic');
+        let sub = this.userSubs.find(s => s.uid === uid);
 
         if (sub) {
             logger.info(`[CheckSubscriptionNow] Found subscription for UID ${uid}`);
             // 创建一个临时的 sub 对象，只包含当前请求的 groupId
-            const tempSub = {
-                ...sub,
-                groupIds: [groupId] // 仅通知当前群组
-            };
-            await this.checkDynamic(tempSub, true); // force = true
+            const tempSub = { ...sub, groupIds: [groupId] };
+            await this.checkUserDynamic(tempSub, true); // force = true
             return true;
         } else {
             // 如果没找到订阅,可能传入的是动态ID而不是UID
@@ -254,7 +326,7 @@ class SubscriptionService {
         }
     }
 
-    async checkLive(sub) {
+    async checkUserLive(sub) {
         const res = await biliApi.getUserLive(sub.uid);
         if (res.status === 'success' && res.data) {
             const isLive = res.data.live_room?.live_status === 1;
@@ -265,7 +337,7 @@ class SubscriptionService {
             // We can store 'lastStatus' instead of 'lastId' for live.
             // For now, let's treat lastId as 'isLive' boolean stored as string? Or just store state.
 
-            const wasLive = sub.lastId === '1';
+            const wasLive = sub.lastLiveStatus === '1';
 
             if (isLive && !wasLive && roomId) {
                 try {
@@ -277,6 +349,7 @@ class SubscriptionService {
 
                         // Send image and link to groups
                         this.notifyGroups(sub.groupIds, [
+                            { type: 'text', data: { text: `[直播] ${res.data.user_info?.uname || sub.uid} 开播` } },
                             { type: 'image', data: { file: `base64://${base64Image}` } },
                             { type: 'text', data: { text: `用户 ${sub.uid} 开始直播了: https://live.bilibili.com/${roomId}` } }
                         ]);
@@ -291,7 +364,49 @@ class SubscriptionService {
                 }
             }
 
-            sub.lastId = isLive ? '1' : '0';
+            sub.lastLiveStatus = isLive ? '1' : '0';
+        }
+    }
+
+    async checkBangumi(sub) {
+        const res = await biliApi.getBangumiInfo(sub.seasonId);
+        if (res.status === 'success' && res.data) {
+            const info = res.data;
+            const newEp = info.new_ep || {};
+            const epId = newEp.id;
+            const epTitle = newEp.index_show || newEp.title || '';
+            const isNew = newEp.is_new === 1;
+            if (epId && (sub.lastEpId === null || sub.lastEpId !== epId)) {
+                try {
+                    const base64Image = await imageGenerator.generatePreviewCard({ status: 'success', type: 'bangumi', data: info }, 'bangumi');
+                    const seasonUrl = `https://www.bilibili.com/bangumi/play/ss${sub.seasonId}`;
+                    const epUrl = `https://www.bilibili.com/bangumi/play/ep${epId}`;
+                    const updateTimeRaw = newEp.pub_time || newEp.release_time || info.publish?.pub_time || '';
+                    let updateTimeStr = '';
+                    let updateEpoch = Date.now();
+                    if (updateTimeRaw) {
+                        const safeStr = (updateTimeRaw + '').replace(' ', 'T');
+                        const dt = new Date(safeStr);
+                        if (!isNaN(dt.getTime())) {
+                            updateTimeStr = dt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            updateEpoch = dt.getTime();
+                        }
+                    }
+                    if (!updateTimeStr) {
+                        updateTimeStr = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                    }
+                    this.notifyGroups(sub.groupIds, [
+                        { type: 'text', data: { text: `[番剧更新] ${info.title} 更新至 ${epTitle || epId}\n更新时间：${updateTimeStr}` } },
+                        { type: 'image', data: { file: `base64://${base64Image}` } },
+                        { type: 'text', data: { text: `观看入口：${epUrl}\n番剧主页：${seasonUrl}` } }
+                    ]);
+                } catch (e) {
+                    logger.error(`[CheckBangumi] Error generating image for season ${sub.seasonId}:`, e);
+                    this.notifyGroups(sub.groupIds, `[番剧更新] ${info.title} 更新至 ${epTitle || epId}\n观看入口：https://www.bilibili.com/bangumi/play/ep${epId}\n番剧主页：https://www.bilibili.com/bangumi/play/ss${sub.seasonId}`);
+                }
+                sub.lastEpId = epId;
+                sub.lastEpTime = updateEpoch;
+            }
         }
     }
 

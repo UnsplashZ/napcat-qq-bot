@@ -474,61 +474,71 @@ class MessageHandler {
                 this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '本群暂无订阅。' } }]);
             } else {
                 let message = '本群订阅列表：\n';
-                subs.forEach((sub, index) => {
-                    message += `${index + 1}. UP主ID: ${sub.uid}, 订阅类型: ${sub.type === 'dynamic' ? '动态' : '直播'}\n`;
-                });
+                const userSubs = subs.filter(s => s.type === 'user');
+                const bangumiSubs = subs.filter(s => s.type === 'bangumi');
+                if (userSubs.length) {
+                    message += '\n【用户订阅】\n';
+                    userSubs.forEach((sub, index) => {
+                        message += `${index + 1}. 用户ID: ${sub.uid}\n`;
+                    });
+                }
+                if (bangumiSubs.length) {
+                    message += '\n【番剧订阅】\n';
+                    bangumiSubs.forEach((sub, index) => {
+                        message += `${index + 1}. SeasonID: ${sub.seasonId}\n`;
+                    });
+                }
                 this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: message } }]);
             }
             return;
         }
 
         // Command: /取消订阅 <uid> <type>
-        if (rawMessage.startsWith('/取消订阅 ') || rawMessage.startsWith('/unsub ')) {
+        if (rawMessage.startsWith('/取消订阅用户 ')) {
             const parts = rawMessage.split(' ');
-            if (parts.length === 3) {
+            if (parts.length === 2) {
                 const uid = parts[1];
-                let type = parts[2];
-                
-                if (type === '动态') type = 'dynamic';
-                if (type === '直播') type = 'live';
-
-                if (type !== 'dynamic' && type !== 'live') {
-                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /取消订阅 <uid> <动态|直播>' } }]);
-                    return;
-                }
-
-                const result = subscriptionService.removeSubscription(uid, groupId, type);
-                const typeName = type === 'dynamic' ? '动态' : '直播';
-                if (result) {
-                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `已取消订阅用户 ${uid} 的 ${typeName} 更新。` } }]);
-                } else {
-                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `未找到用户 ${uid} 的 ${typeName} 订阅。` } }]);
-                }
+                const result = subscriptionService.removeUserSubscription(uid, groupId);
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: result ? `已取消订阅用户 ${uid}。` : `未找到用户 ${uid} 的订阅。` } }]);
             } else {
-                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /取消订阅 <uid> <动态|直播>' } }]);
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /取消订阅用户 <uid>' } }]);
             }
             return;
         }
 
         // Command: /订阅 <uid> <type>
-        if (rawMessage.startsWith('/订阅 ') || rawMessage.startsWith('/sub ')) {
+        if (rawMessage.startsWith('/订阅用户 ')) {
             const parts = rawMessage.split(' ');
-            if (parts.length === 3) {
+            if (parts.length === 2) {
                 const uid = parts[1];
-                let type = parts[2];
-
-                if (type === '动态') type = 'dynamic';
-                if (type === '直播') type = 'live';
-
-                if (type !== 'dynamic' && type !== 'live') {
-                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅 <uid> <动态|直播>' } }]);
-                    return;
-                }
-
-                subscriptionService.addSubscription(uid, groupId, type);
-                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `成功订阅用户 ${uid} 的 ${type === 'dynamic' ? '动态' : '直播'} 更新。` } }]);
+                subscriptionService.addUserSubscription(uid, groupId);
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `成功订阅用户 ${uid}（动态+直播）。` } }]);
             } else {
-                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅 <uid> <动态|直播>' } }]);
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅用户 <uid>' } }]);
+            }
+            return;
+        }
+
+        if (rawMessage.startsWith('/订阅番剧 ')) {
+            const parts = rawMessage.split(' ');
+            if (parts.length === 2) {
+                const seasonId = parts[1];
+                subscriptionService.addBangumiSubscription(seasonId, groupId);
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `成功订阅番剧 ${seasonId} 更新。` } }]);
+            } else {
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅番剧 <season_id>' } }]);
+            }
+            return;
+        }
+
+        if (rawMessage.startsWith('/取消订阅番剧 ')) {
+            const parts = rawMessage.split(' ');
+            if (parts.length === 2) {
+                const seasonId = parts[1];
+                const result = subscriptionService.removeBangumiSubscription(seasonId, groupId);
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: result ? `已取消订阅番剧 ${seasonId}。` : `未找到番剧 ${seasonId} 的订阅。` } }]);
+            } else {
+                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /取消订阅番剧 <season_id>' } }]);
             }
             return;
         }
@@ -681,8 +691,8 @@ class MessageHandler {
             return;
         }
 
-        // Extract all bilibili links from the message and process them
-        const links = this.extractLinks(rawMessage, groupId);
+        const safeRawMessage = rawMessage.replace(/\[CQ:[^\]]+\]/g, '');
+        const links = this.extractLinks(safeRawMessage, groupId);
 
         // Process each link that's not in cache
         let hasProcessedLinks = false;
