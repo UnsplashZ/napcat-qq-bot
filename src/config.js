@@ -66,6 +66,9 @@ const config = {
         user: true
     },
 
+    // Show ID Config (Toggle UID display)
+    showId: configData.showId !== undefined ? configData.showId : true,
+
     // Group Configs (overrides global settings per group)
     groupConfigs: configData.groupConfigs || {},
 
@@ -154,6 +157,7 @@ const config = {
             subscriptionCheckInterval: this.subscriptionCheckInterval,
             nightMode: this.nightMode,
             labelConfig: this.labelConfig,
+            showId: this.showId,
             groupConfigs: this.groupConfigs
         };
         try {

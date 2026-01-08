@@ -4,7 +4,7 @@ import asyncio
 import re
 import aiohttp
 from bs4 import BeautifulSoup
-from bilibili_api import video, bangumi, user, article, live, dynamic, show, topic, Credential
+from bilibili_api import video, bangumi, user, article, live, dynamic, show, topic, opus, Credential
 import bilibili_api.login_v2 as login
 import io
 from PIL import Image
@@ -91,7 +91,11 @@ async def get_image_focus_color(url: str) -> str:
 
 async def get_video_info(bvid):
     try:
-        v = video.Video(bvid=bvid, credential=load_credential())
+        if str(bvid).lower().startswith('av'):
+            aid = int(str(bvid)[2:])
+            v = video.Video(aid=aid, credential=load_credential())
+        else:
+            v = video.Video(bvid=bvid, credential=load_credential())
         info = await v.get_info()
         cover_url = info.get('pic') or ''
         owner = info.get('owner') or {}
@@ -185,9 +189,167 @@ async def get_bangumi_info(season_id):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+def _parse_opus_json_to_html(modules):
+    html_parts = []
+    for module in modules:
+        if module.get('module_type') == 'MODULE_TYPE_CONTENT':
+            paragraphs = module.get('module_content', {}).get('paragraphs', [])
+            for para in paragraphs:
+                para_type = para.get('para_type')
+                
+                # Text
+                if para_type == 1:
+                    nodes = para.get('text', {}).get('nodes', [])
+                    p_content = ""
+                    for node in nodes:
+                        if node.get('type') == 'TEXT_NODE_TYPE_WORD':
+                            word_info = node.get('word', {})
+                            text = word_info.get('words', '').replace('\n', '<br>')
+                            # Handle styles
+                            style = word_info.get('style', {})
+                            color = word_info.get('color')
+                            
+                            span_style = ""
+                            if style.get('bold'):
+                                span_style += "font-weight:bold;"
+                            if color:
+                                span_style += f"color:{color};"
+                            
+                            if span_style:
+                                p_content += f'<span style="{span_style}">{text}</span>'
+                            else:
+                                p_content += text
+                    if p_content:
+                        html_parts.append(f'<p>{p_content}</p>')
+                    else:
+                        html_parts.append('<br>')
+                
+                # Image
+                elif para_type == 2:
+                    pics = para.get('pic', {}).get('pics', [])
+                    for pic in pics:
+                        url = pic.get('url')
+                        if url:
+                            html_parts.append(f'<img src="{url}" style="max-width:100%;" />')
+                            
+                # Line
+                elif para_type == 3:
+                     html_parts.append('<hr />')
+                     
+                # Heading
+                elif para_type == 8:
+                    level = para.get('heading', {}).get('level', 1)
+                    nodes = para.get('heading', {}).get('nodes', [])
+                    h_content = ""
+                    for node in nodes:
+                        if node.get('type') == 'TEXT_NODE_TYPE_WORD':
+                            word_info = node.get('word', {})
+                            text = word_info.get('words', '')
+                            # Handle styles for heading too
+                            color = word_info.get('color')
+                            if color:
+                                h_content += f'<span style="color:{color}">{text}</span>'
+                            else:
+                                h_content += text
+                    html_parts.append(f'<h{level}>{h_content}</h{level}>')
+
+    return "".join(html_parts)
+
+async def get_opus_detail(opus_id):
+    try:
+        o = opus.Opus(int(opus_id), credential=load_credential())
+        info = await o.get_info()
+        
+        item = info.get('item', {})
+        basic = item.get('basic', {})
+        modules = item.get('modules', [])
+        
+        title = basic.get('title', '')
+        
+        html_content = _parse_opus_json_to_html(modules)
+        
+        # Extract author info from modules
+        author_face = ""
+        author_name = ""
+        pub_ts = 0
+        stats = {}
+        
+        for module in modules:
+            if module.get('module_type') == 'MODULE_TYPE_AUTHOR':
+                author_module = module.get('module_author', {})
+                author_face = author_module.get('face', '')
+                author_name = author_module.get('name', '')
+                pub_ts = author_module.get('pub_ts', 0)
+            elif module.get('module_type') == 'MODULE_TYPE_STAT':
+                stat_module = module.get('module_stat', {})
+                stats = {
+                    'view': 0, # Opus often doesn't show view count in stat module
+                    'like': stat_module.get('like', {}).get('count', 0),
+                    'reply': stat_module.get('comment', {}).get('count', 0),
+                    'share': stat_module.get('forward', {}).get('count', 0)
+                }
+
+        # Determine cover (check top module or first image)
+        cover = ""
+        # Check MODULE_TYPE_TOP
+        for module in modules:
+            if module.get('module_type') == 'MODULE_TYPE_TOP':
+                # Could be video or image
+                display = module.get('module_top', {}).get('display', {})
+                if display.get('video'):
+                    cover = display.get('video', {}).get('cover', '')
+                break
+        
+        if not cover:
+             # Try to find first image in content
+             for module in modules:
+                if module.get('module_type') == 'MODULE_TYPE_CONTENT':
+                    paragraphs = module.get('module_content', {}).get('paragraphs', [])
+                    for para in paragraphs:
+                        if para.get('para_type') == 2:
+                             pics = para.get('pic', {}).get('pics', [])
+                             if pics:
+                                 cover = pics[0].get('url', '')
+                                 break
+                    if cover:
+                        break
+
+        data = {
+            "title": title,
+            "html_content": html_content,
+            "summary": html_content, # Use full HTML content as summary for article mode
+            "publish_time": pub_ts,
+            "author_face": author_face,
+            "author_name": author_name,
+            "banner_url": cover,
+            "image_urls": [cover] if cover else [],
+            "stats": stats,
+             "focus": {
+                "cover": await get_image_focus_color(cover),
+                "avatar": await get_image_focus_color(author_face)
+            }
+        }
+        
+        return {"status": "success", "type": "article", "data": data}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}
+
 async def get_article_info(cvid):
     try:
-        cvid_int = int(cvid.replace('cv', ''))
+        # Clean cvid: remove 'cv' prefix
+        # Handle cases like "cv123456?param=1" -> "123456"
+        # Split by '?' first to remove query params
+        base_id = cvid.split('?')[0].split('#')[0]
+        # Remove 'cv' (case insensitive)
+        base_id = re.sub(r'cv', '', base_id, flags=re.IGNORECASE)
+        # Extract the first sequence of digits
+        match = re.search(r'(\d+)', base_id)
+        if not match:
+             return {"status": "error", "message": "Invalid Article ID"}
+             
+        cvid_int = int(match.group(1))
         a = article.Article(cvid_int, credential=load_credential())
         info = await a.get_info()
 
@@ -208,8 +370,10 @@ async def get_article_info(cvid):
 
         # Try to get content for summary
         summary = ""
+        html_content = ""
         try:
             content = await a.fetch_content()
+            html_content = content
             summary = re.sub('<[^<]+?>', '', content)
         except Exception:
             pass
@@ -223,22 +387,38 @@ async def get_article_info(cvid):
                 }
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url, headers=headers) as resp:
+                        # Check for redirect to Opus
+                        final_url = str(resp.url)
+                        if '/opus/' in final_url:
+                            opus_match = re.search(r'/opus/(\d+)', final_url)
+                            if opus_match:
+                                opus_id = opus_match.group(1)
+                                return await get_opus_detail(opus_id)
+
                         if resp.status == 200:
                             html = await resp.text()
                             soup = BeautifulSoup(html, 'html.parser')
                             # Try specific holders first
-                            holder = soup.find(class_='article-holder') or soup.find(id='read-article-holder')
+                            holder = soup.find(class_='article-holder') or soup.find(id='read-article-holder') or soup.find(class_='opus-module-content')
                             if holder:
+                                # Clean up scripts/styles from holder
+                                for script in holder(["script", "style"]):
+                                    script.extract()
+                                html_content = holder.decode_contents()
                                 summary = holder.get_text(separator='\n', strip=True)
                             else:
                                 # Fallback to body text, removing scripts/styles
                                 for script in soup(["script", "style"]):
                                     script.extract()
+                                html_content = soup.body.decode_contents() if soup.body else soup.decode_contents()
                                 summary = soup.get_text(separator='\n', strip=True)
             except Exception as e:
                 summary = f"无法抓取正文: {str(e)}"
+                html_content = ""
 
         info['summary'] = summary[:2500] if summary else '点击查看详情'
+        info['html_content'] = html_content
+
         info['author_face'] = author_face  # 添加作者头像
         
         # Determine cover image
@@ -459,6 +639,16 @@ async def get_dynamic_detail(dynamic_id):
         # 检查返回的数据是否有效
         if not info:
             return {"status": "error", "message": f"无法获取动态 {dynamic_id} 的信息，可能已被删除或设置为私密"}
+
+        # Check for Opus redirect in basic info
+        item = info.get('item', {})
+        basic = item.get('basic', {})
+        jump_url = basic.get('jump_url', '')
+        if '/opus/' in jump_url:
+            opus_match = re.search(r'/opus/(\d+)', jump_url)
+            if opus_match:
+                opus_id = opus_match.group(1)
+                return await get_opus_detail(opus_id)
 
         modules = (info.get('item') or {}).get('modules') or info.get('modules') or {}
 
@@ -801,9 +991,14 @@ async def main():
         result = await get_user_live(uid)
         print(json.dumps(result, ensure_ascii=False))
         
-    elif command == "dynamic_detail" or command == "opus":
+    elif command == "dynamic_detail":
         did = sys.argv[2]
         result = await get_dynamic_detail(did)
+        print(json.dumps(result, ensure_ascii=False))
+
+    elif command == "opus":
+        did = sys.argv[2]
+        result = await get_opus_detail(did)
         print(json.dumps(result, ensure_ascii=False))
 
     elif command == "ep":

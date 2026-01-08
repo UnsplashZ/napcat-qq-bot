@@ -79,7 +79,7 @@ class ImageGenerator {
         }
     }
 
-    async generatePreviewCard(data, type, groupId) {
+    async generatePreviewCard(data, type, groupId, show_id = true) {
         await this.init();
         const page = await this.browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -109,7 +109,7 @@ class ImageGenerator {
         } else if (type === 'bangumi') {
             baseWidth = 950;
         } else if (type === 'article') {
-            baseWidth = 1000;
+            baseWidth = 1080;
         } else if (type === 'user') {
             baseWidth = 900;
         }
@@ -417,6 +417,7 @@ class ImageGenerator {
                     --color-border: rgba(255, 255, 255, 0.08);
                     --color-soft-bg: #12161B;
                     --color-soft-bg-2: #0D1014;
+                    --color-primary: ${badgeColor};
 
                     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.60);
                     --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.65);
@@ -520,9 +521,10 @@ class ImageGenerator {
 
                 .avatar-wrapper {
                     position: relative;
-                    width: 108px;
-                    height: 108px;
+                    width: 128px;
+                    height: 128px;
                     margin-right: 18px;
+                    transition: all 0.3s ease-in-out;
                 }
 
                 .avatar {
@@ -536,11 +538,12 @@ class ImageGenerator {
                     border: 3px solid var(--color-card-bg);
                     box-shadow: var(--shadow-sm);
                     z-index: 1;
+                    transition: all 0.3s ease-in-out;
                 }
 
                 .avatar.no-frame {
-                    width: 82px;
-                    height: 82px;
+                    width: 96px;
+                    height: 96px;
                 }
 
                 .avatar.no-border { border: none; }
@@ -549,13 +552,14 @@ class ImageGenerator {
                     position: absolute;
                     top: 50%;
                     left: 50%;
-                    width: 108px;
-                    height: 108px;
+                    width: 128px;
+                    height: 128px;
                     transform: translate(-50%, -50%);
                     object-fit: contain;
                     pointer-events: none;
                     z-index: 2;
                     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
+                    transition: all 0.3s ease-in-out;
                 }
 
                 .user-info {
@@ -581,7 +585,7 @@ class ImageGenerator {
                     padding: 4px 10px;
                     border-radius: var(--radius-md);
                     font-weight: 700;
-                    box-shadow: 0 2px 8px rgba(255, 179, 0, 0.3);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 }
 
                 .pub-time {
@@ -621,7 +625,7 @@ class ImageGenerator {
                     top: 0;
                     left: 0;
                     right: 0;
-                    height: 140px;
+                    height: 160px;
                     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
                     overflow: hidden;
                 }
@@ -639,7 +643,7 @@ class ImageGenerator {
                     top: 0;
                     left: 0;
                     right: 0;
-                    height: 140px;
+                    height: 160px;
                     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
                     background: linear-gradient(to bottom, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
                 }
@@ -674,6 +678,108 @@ class ImageGenerator {
                     word-wrap: break-word;
                     text-align: justify;
                 }
+                .text-content.truncated {
+                    max-height: 1100px;
+                    overflow: hidden;
+                    position: relative;
+                }
+                .text-content.truncated::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 160px;
+                    background: linear-gradient(to bottom, transparent, var(--card-bg));
+                    pointer-events: none;
+                }
+
+                /* Article Mode Specifics */
+                .container.article-mode .card {
+                    max-width: 960px;
+                    margin: 0 auto;
+                }
+                
+                .article-body {
+                    font-size: 30px;
+                    color: var(--color-text);
+                    line-height: 1.8;
+                    margin-top: 24px;
+                    margin-bottom: 24px;
+                    word-wrap: break-word;
+                    text-align: justify;
+                }
+                .article-body img {
+                    max-width: 100%;
+                    height: auto;
+                    border-radius: var(--radius-md);
+                    margin: 20px 0;
+                    display: block;
+                    box-shadow: var(--shadow-sm);
+                }
+                .article-body p {
+                    margin-bottom: 24px;
+                }
+                .article-body h1 {
+                    font-size: 1.6em;
+                    font-weight: 700;
+                    margin: 40px 0 24px;
+                    line-height: 1.3;
+                    border-bottom: 2px solid var(--color-border);
+                    padding-bottom: 16px;
+                }
+                .article-body h2 {
+                    font-size: 1.4em;
+                    font-weight: 700;
+                    margin: 36px 0 20px;
+                    line-height: 1.3;
+                    border-left: 6px solid var(--color-primary);
+                    padding-left: 16px;
+                }
+                .article-body h3 {
+                    font-size: 1.25em;
+                    font-weight: 700;
+                    margin: 28px 0 16px;
+                }
+                .article-body blockquote {
+                    background: var(--color-soft-bg);
+                    border-left: 6px solid var(--color-subtext);
+                    margin: 24px 0;
+                    padding: 20px 24px;
+                    color: var(--color-subtext);
+                    border-radius: var(--radius-sm);
+                }
+                .article-body pre {
+                    background: var(--color-soft-bg-2);
+                    padding: 20px;
+                    border-radius: var(--radius-md);
+                    overflow-x: auto;
+                    font-family: monospace;
+                    margin: 24px 0;
+                    font-size: 0.9em;
+                }
+                .article-body ul, .article-body ol {
+                    padding-left: 40px;
+                    margin-bottom: 24px;
+                }
+                .article-body li {
+                    margin-bottom: 12px;
+                }
+                .article-body a {
+                    color: var(--color-secondary);
+                    text-decoration: none;
+                    border-bottom: 1px dashed var(--color-secondary);
+                }
+                /* Bilibili specific cleanups */
+                .article-body .cut-off-5 { display: none; }
+                .article-body .img-caption { 
+                    font-size: 24px; 
+                    color: var(--color-subtext); 
+                    text-align: center; 
+                    margin-top: -10px;
+                    margin-bottom: 24px;
+                }
+
                 .orig-card {
                     margin-top: 16px;
                     border: 2px solid var(--color-border);
@@ -720,6 +826,21 @@ class ImageGenerator {
                     color: var(--color-subtext);
                     line-height: 1.7;
                     white-space: pre-wrap;
+                }
+                .orig-text.truncated {
+                    max-height: 800px;
+                    overflow: hidden;
+                    position: relative;
+                }
+                .orig-text.truncated::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 120px;
+                    background: linear-gradient(to bottom, transparent, var(--color-card-bg));
+                    pointer-events: none;
                 }
 
                 .stats {
@@ -1065,10 +1186,27 @@ class ImageGenerator {
          `;
 
         let htmlContent = `<html><head>${style}</head><body>
-            <div class="container ${themeClass} gradient-bg" style="--gradient-mix:${gradientMix}">
+            <div class="container ${themeClass} gradient-bg ${type === 'article' ? 'article-mode' : ''}" style="--gradient-mix:${gradientMix}">
                 ${(function() {
                     const labelConfig = config.getGroupConfig(groupId, 'labelConfig');
-                    return (labelConfig && labelConfig[type] !== false) ? `
+                    
+                    // Determine subtype for granular control
+                    let subtype = type;
+                    if (type === 'bangumi' && data.data) {
+                        const st = data.data.season_type;
+                        if (st === 2) subtype = 'movie';
+                        else if (st === 3) subtype = 'doc';
+                        else if (st === 4) subtype = 'guocha';
+                        else if (st === 5) subtype = 'tv';
+                        else if (st === 7) subtype = 'variety';
+                    }
+                    
+                    // Check subtype config first, then fallback to type config
+                    const isVisible = (labelConfig && labelConfig[subtype] !== undefined) 
+                        ? labelConfig[subtype] 
+                        : (labelConfig && labelConfig[type] !== false);
+
+                    return isVisible ? `
                 <div class="type-badge">
                     <span>${currentType.icon}</span>
                     <span>${currentType.label}</span>
@@ -1218,12 +1356,12 @@ class ImageGenerator {
                         </div>
                     </div>
                     <div class="title">${info.title}</div>
-                    <div class="stats">
-                        <span class="stat-item">${ICONS.view} ${this.formatNumber(info.stats?.view)}</span>
+                    <div class="text-content truncated">${info.summary || ''}</div>
+                    <div class="stats" style="margin-top: 20px;">
+                        <span class="stat-item">${ICONS.share} ${this.formatNumber(info.stats?.share)}</span>
                         <span class="stat-item">${ICONS.like} ${this.formatNumber(info.stats?.like)}</span>
                         <span class="stat-item">${ICONS.comment} ${this.formatNumber(info.stats?.reply)}</span>
                     </div>
-                    <div class="text-content">${info.summary || ''}</div>
                 </div>
             `;
         } 
@@ -1487,7 +1625,7 @@ class ImageGenerator {
                         </div>
                         <div class="orig-content">
                             ${o_title ? `<div class="orig-title">${o_title}</div>` : ''}
-                            ${o_text ? `<div class="orig-text">${o_text}</div>` : ''}
+                            ${o_text ? `<div class="orig-text truncated">${o_text}</div>` : ''}
                             ${o_voteHtml}
                             ${o_mediaHtml}
                         </div>
@@ -1519,7 +1657,7 @@ class ImageGenerator {
                         </div>
                     </div>
                     ${title ? `<div class="title">${title}</div>` : ''}
-                    <div class="text-content">${text}</div>
+                    <div class="text-content truncated">${text}</div>
                     ${voteHtml}
                     ${origHtml}
                     ${mediaHtml}
@@ -1608,16 +1746,17 @@ class ImageGenerator {
             htmlContent += `
                 <div class="content">
                     <div class="header" style="display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 10px;">
-                        <div class="avatar-wrapper" style="width: 150px; height: 150px; margin-bottom: 20px;">
+                        <div class="avatar-wrapper" style="width: 150px; height: 150px; margin-bottom: 20px; box-sizing: content-box; ${pendantImage ? 'padding-top: 85px;' : ''}">
                             <img class="avatar ${pendantImage ? '' : 'no-frame'}" src="${face}" style="width: 150px; height: 150px; border-width: 4px;">
-                            ${pendantImage ? `<img class="avatar-frame" src="${pendantImage}" style="width: 154%; height: 154%;">` : ''}
+                            ${pendantImage ? `<img class="avatar-frame" src="${pendantImage}" style="width: 160%; height: 160%;">` : ''}
                         </div>
                         <div class="user-info" style="width: 100%;">
                             <div class="user-name" style="font-size: 36px; font-weight: bold; color: var(--color-text); display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;">
                                 ${name}
-                                <span class="user-level" style="font-size: 16px; background: #FB7299; color: white; padding: 4px 8px; border-radius: 4px; vertical-align: middle;">Lv${level}</span>
-                                ${vipLabel ? `<span style="font-size: 16px; background: #FB7299; color: white; padding: 4px 8px; border-radius: 4px; vertical-align: middle;">${vipLabel}</span>` : ''}
+                                <span class="user-level" style="font-size: 16px; background: var(--color-primary); color: white; padding: 4px 8px; border-radius: 4px; vertical-align: middle;">Lv${level}</span>
+                                ${vipLabel ? `<span style="font-size: 16px; background: var(--color-primary); color: white; padding: 4px 8px; border-radius: 4px; vertical-align: middle;">${vipLabel}</span>` : ''}
                             </div>
+                            ${show_id ? `<div style="text-align: center; font-size: 16px; color: var(--color-subtext); margin-top: 4px; font-family: monospace;">UID: ${info.uid}</div>` : ''}
                             ${medalName ? `
                             <div style="margin-top: 12px; display: flex; align-items: center; justify-content: center;">
                                 <div style="display: inline-flex; border: 1px solid var(--color-subtext); border-radius: 4px; overflow: hidden;">
@@ -1668,12 +1807,20 @@ class ImageGenerator {
         return buffer.toString('base64');
     }
 
-    async generateSubscriptionList(data, groupId) {
+    async generateSubscriptionList(data, groupId, show_id = true) {
         await this.init();
         const page = await this.browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
+        // 设置视口以提高清晰度
+        await page.setViewport({
+            width: 880,
+            height: 1000,
+            deviceScaleFactor: 2
+        });
+
         const isNight = this.isNightMode(groupId);
+        const themeClass = isNight ? 'theme-dark' : 'theme-light';
         
         const html = `<!DOCTYPE html>
         <html>
@@ -1681,52 +1828,83 @@ class ImageGenerator {
             <meta charset="UTF-8">
             <style>
                 :root {
-                    --bg-color: ${isNight ? '#1a1a1a' : '#f4f5f7'};
-                    --card-bg: ${isNight ? '#2d2d2d' : '#ffffff'};
-                    --text-main: ${isNight ? '#e0e0e0' : '#18191c'};
-                    --text-subtitle: ${isNight ? '#aaaaaa' : '#9499a0'};
-                    --border-color: ${isNight ? '#3d3d3d' : '#e3e5e7'};
+                    --bg-gradient: linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%);
+                    --card-bg: #fff;
+                    --card-border: rgba(255, 255, 255, 0.9);
+                    --text-title: #333;
+                    --text-subtitle: #999;
+                    --border-color: #e3e5e7;
                     --primary-color: #00AEEC;
                     --accent-color: #FB7299;
+                    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+                    --text-main: #18191c;
+                }
+                .theme-dark {
+                    --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2c3e50 100%);
+                    --card-bg: #171B21;
+                    --card-border: rgba(255, 255, 255, 0.08);
+                    --text-title: #E8EAED;
+                    --text-subtitle: #A8ADB4;
+                    --border-color: #3d3d3d;
+                    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+                    --text-main: #e0e0e0;
                 }
                 body {
                     margin: 0;
-                    padding: 20px;
-                    background-color: var(--bg-color);
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    padding: 0;
+                    background: transparent;
+                    font-family: "MiSans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+                }
+                #wrapper {
+                    padding: 40px;
+                    background: var(--bg-gradient);
+                    border-radius: 20px;
                     width: 800px;
+                    overflow: hidden;
                 }
                 .container {
-                    background-color: var(--card-bg);
-                    border-radius: 12px;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, ${isNight ? '0.4' : '0.1'});
-                    padding: 24px;
+                    background: var(--card-bg);
+                    border-radius: 20px;
+                    box-shadow: var(--shadow-card);
+                    border: 1px solid var(--card-border);
+                    padding: 28px;
                     overflow: hidden;
                 }
                 .header {
                     text-align: center;
-                    margin-bottom: 24px;
+                    margin-bottom: 28px;
                     border-bottom: 2px solid var(--border-color);
-                    padding-bottom: 16px;
+                    padding-bottom: 20px;
                 }
                 .header h1 {
                     margin: 0;
-                    font-size: 24px;
-                    color: var(--text-main);
+                    font-size: 32px;
+                    background: linear-gradient(135deg, #FB7299, #FF6699);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    font-weight: 800;
+                    letter-spacing: 1px;
                 }
                 .section {
-                    margin-bottom: 24px;
+                    margin-bottom: 28px;
                 }
                 .section-title {
-                    font-size: 18px;
-                    font-weight: bold;
-                    color: var(--text-main);
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: var(--text-title);
                     margin-bottom: 16px;
-                    padding-left: 10px;
-                    border-left: 4px solid var(--primary-color);
                     display: flex;
                     align-items: center;
-                    justify-content: space-between;
+                    gap: 10px;
+                }
+                .section-title::before {
+                    content: '';
+                    display: block;
+                    width: 5px;
+                    height: 20px;
+                    background: linear-gradient(135deg, #00A1D6, #00B5E5);
+                    border-radius: 3px;
+                    box-shadow: 0 2px 8px rgba(0, 161, 214, 0.3);
                 }
                 .count-badge {
                     background: var(--primary-color);
@@ -1734,6 +1912,7 @@ class ImageGenerator {
                     font-size: 12px;
                     padding: 2px 8px;
                     border-radius: 10px;
+                    font-weight: bold;
                 }
                 .user-list {
                     display: grid;
@@ -1744,9 +1923,10 @@ class ImageGenerator {
                     display: flex;
                     align-items: center;
                     padding: 12px;
-                    background-color: ${isNight ? '#363636' : '#f9f9f9'};
-                    border-radius: 8px;
+                    background-color: ${isNight ? 'rgba(255,255,255,0.05)' : '#f9f9f9'};
+                    border-radius: 12px;
                     border: 1px solid var(--border-color);
+                    transition: all 0.2s;
                 }
                 .avatar-container {
                     position: relative;
@@ -1761,14 +1941,7 @@ class ImageGenerator {
                     border-radius: 50%;
                     object-fit: cover;
                     border: 2px solid var(--card-bg);
-                }
-                .pendant {
-                    position: absolute;
-                    top: -12px;
-                    left: -12px;
-                    width: 84px;
-                    height: 84px;
-                    pointer-events: none;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
                 }
                 .user-info {
                     flex: 1;
@@ -1814,26 +1987,7 @@ class ImageGenerator {
                 }
                 .uid {
                     font-family: monospace;
-                }
-                .fan-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    border: 1px solid var(--primary-color);
-                    border-radius: 2px;
-                    font-size: 10px;
-                    height: 16px;
-                    line-height: 14px;
-                    overflow: hidden;
-                }
-                .fan-name {
-                    background-color: var(--primary-color);
-                    color: white;
-                    padding: 0 4px;
-                }
-                .fan-level {
-                    color: var(--primary-color);
-                    background-color: ${isNight ? '#1a1a1a' : '#fff'};
-                    padding: 0 4px;
+                    opacity: 0.8;
                 }
 
                 .bangumi-list {
@@ -1843,8 +1997,8 @@ class ImageGenerator {
                 }
                 .bangumi-card {
                     padding: 12px;
-                    background-color: ${isNight ? '#363636' : '#f9f9f9'};
-                    border-radius: 8px;
+                    background-color: ${isNight ? 'rgba(255,255,255,0.05)' : '#f9f9f9'};
+                    border-radius: 12px;
                     border: 1px solid var(--border-color);
                     display: flex;
                     align-items: center;
@@ -1867,11 +2021,14 @@ class ImageGenerator {
                     color: var(--text-subtitle);
                     padding: 20px;
                     font-style: italic;
+                    background: rgba(0,0,0,0.02);
+                    border-radius: 8px;
                 }
             </style>
         </head>
-        <body>
-            <div class="container">
+        <body class="${themeClass}">
+            <div id="wrapper">
+                <div class="container">
                 <div class="header">
                     <h1>订阅列表</h1>
                 </div>
@@ -1884,18 +2041,10 @@ class ImageGenerator {
                     ${data.users.length > 0 ? `
                         <div class="user-list">
                             ${data.users.map(u => {
-                                const pendantImg = u.pendant?.image ? `<img src="${u.pendant.image}" class="pendant" crossorigin="anonymous">` : '';
-                                const fanBadge = (u.fans_medal && u.fans_medal.medal) ? `
-                                    <div class="fan-badge">
-                                        <span class="fan-name">${u.fans_medal.medal.medal_name}</span>
-                                        <span class="fan-level">${u.fans_medal.medal.level}</span>
-                                    </div>
-                                ` : '';
                                 return `
                                 <div class="user-card">
                                     <div class="avatar-container">
                                         <img src="${u.face}" class="avatar" crossorigin="anonymous">
-                                        ${pendantImg}
                                     </div>
                                     <div class="user-info">
                                         <div class="user-name-row">
@@ -1903,8 +2052,7 @@ class ImageGenerator {
                                             <span class="level-badge lv${u.level}">LV${u.level}</span>
                                         </div>
                                         <div class="user-details">
-                                            <span class="uid">UID:${u.uid}</span>
-                                            ${fanBadge}
+                                            ${show_id ? `<span class="uid">UID:${u.uid}</span>` : ''}
                                         </div>
                                     </div>
                                 </div>
@@ -1931,15 +2079,16 @@ class ImageGenerator {
                     ` : '<div class="empty-tip">暂无番剧订阅</div>'}
                 </div>
             </div>
+            </div>
         </body>
         </html>`;
 
         await page.setContent(html);
-        const container = await page.$('.container');
-        const buffer = await container.screenshot({
+        const wrapper = await page.$('#wrapper');
+        const buffer = await wrapper.screenshot({
             type: 'webp',
             quality: 80,
-            omitBackground: false
+            omitBackground: true
         });
 
         await page.close();

@@ -18,6 +18,7 @@ class MessageHandler {
         // Regex for Dynamic (t.bilibili.com/xxxx)
         this.dynamicRegex = /t.bilibili.com\/([0-9]+)/;
         // Regex for Article (read/cv)
+        // Ensure we stop capturing at non-digit characters (like ? or /)
         this.articleRegex = /read\/cv([0-9]+)/;
         // Regex for Live (live.bilibili.com/xxxx)
         this.liveRegex = /live.bilibili.com\/([0-9]+)/;
@@ -173,7 +174,9 @@ class MessageHandler {
                     info = await biliApi.getDynamicInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'dynamic', groupId);
+                            // Use returned type if available (e.g., 'article' for Opus redirects), fallback to 'dynamic'
+                            const cardType = info.type || 'dynamic';
+                            base64Image = await imageGenerator.generatePreviewCard(info, cardType, groupId);
                             url = `https://t.bilibili.com/${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -229,7 +232,7 @@ class MessageHandler {
                     info = await biliApi.getOpusInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'dynamic', groupId);
+                            base64Image = await imageGenerator.generatePreviewCard(info, 'article', groupId);
                             url = `https://www.bilibili.com/opus/${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -247,7 +250,7 @@ class MessageHandler {
                     info = await biliApi.getEpInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'bangumi');
+                            base64Image = await imageGenerator.generatePreviewCard(info, 'bangumi', groupId);
                             url = `https://www.bilibili.com/bangumi/play/ep${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -266,7 +269,7 @@ class MessageHandler {
                     info = await biliApi.getMediaInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'bangumi');
+                            base64Image = await imageGenerator.generatePreviewCard(info, 'bangumi', groupId);
                             url = `https://www.bilibili.com/bangumi/media/md${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -285,7 +288,8 @@ class MessageHandler {
                     info = await biliApi.getUserInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'user');
+                            const showId = config.getGroupConfig(groupId, 'showId');
+                            base64Image = await imageGenerator.generatePreviewCard(info, 'user', groupId, showId);
                             url = `https://space.bilibili.com/${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -511,7 +515,8 @@ class MessageHandler {
                             bangumis: bangumiSubs
                         };
 
-                        const base64Image = await imageGenerator.generateSubscriptionList(data, groupId);
+                        const showId = config.getGroupConfig(groupId, 'showId');
+                        const base64Image = await imageGenerator.generateSubscriptionList(data, groupId, showId);
                         this.sendGroupMessage(ws, groupId, [{ type: 'image', data: { file: `base64://${base64Image}` } }]);
 
                     } catch (e) {
@@ -950,7 +955,12 @@ class MessageHandler {
                      '专栏': 'article', 'article': 'article',
                      '直播': 'live', 'live': 'live',
                      '动态': 'dynamic', 'dynamic': 'dynamic',
-                     '用户': 'user', 'user': 'user'
+                     '用户': 'user', 'user': 'user',
+                     '电影': 'movie', 'movie': 'movie',
+                     '电视剧': 'tv', 'tv': 'tv',
+                     '国创': 'guocha', 'guocha': 'guocha',
+                     '纪录片': 'doc', 'doc': 'doc',
+                     '综艺': 'variety', 'variety': 'variety'
                  };
                  const key = categoryMap[category];
                  
@@ -1051,6 +1061,31 @@ class MessageHandler {
                     this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /设置 深色模式 <开|关|定时> [开始时间-结束时间]' } }]);
                 }
                 return;
+            }
+
+            // 11. 显示UID (/设置 显示UID <开|关>)
+            if (subCommand === '显示UID' || subCommand === 'UID') {
+                 if (!config.isGroupAdmin(groupId, userId)) {
+                     this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '权限不足：此命令仅限群管理员使用。' } }]);
+                     return;
+                 }
+                 const switchState = parts[2];
+                 if (switchState === '开' || switchState === '关') {
+                     const isEnabled = (switchState === '开');
+                     if (groupId) {
+                        if (!config.groupConfigs[groupId]) config.groupConfigs[groupId] = {};
+                        config.groupConfigs[groupId].showId = isEnabled;
+                        config.save();
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `本群 UID 显示已${switchState}。` } }]);
+                     } else {
+                        config.showId = isEnabled;
+                        config.save();
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `全局 UID 显示已${switchState}。` } }]);
+                     }
+                 } else {
+                      this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /设置 显示UID <开|关>' } }]);
+                 }
+                 return;
             }
 
             this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '未知设置指令。请发送 /设置 帮助 查看可用指令。' } }]);

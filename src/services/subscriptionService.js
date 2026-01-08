@@ -288,8 +288,27 @@ class SubscriptionService {
 
             if (res.status === 'success' && res.data) {
                 const dynamicId = res.data.id;
+                const dynamicType = res.data.type; // 获取动态类型
                 const dynamicTime = res.data.pub_ts || 0; // 获取动态发布时间戳
-                logger.info(`[CheckDynamic] Got dynamic ID: ${dynamicId}, Time: ${dynamicTime}, LastID: ${sub.lastId}, LastTime: ${sub.lastTime}`);
+                logger.info(`[CheckDynamic] Got dynamic ID: ${dynamicId}, Type: ${dynamicType}, Time: ${dynamicTime}, LastID: ${sub.lastId}, LastTime: ${sub.lastTime}`);
+
+                // 过滤掉自动发布的直播推荐动态 (DYNAMIC_TYPE_LIVE_RCMD 或 MAJOR_TYPE_LIVE_RCMD)
+                // 这种动态通常在开始直播时自动发送，我们使用 checkUserLive 单独处理直播通知，避免重复
+                const isLiveDynamic = dynamicType === 'DYNAMIC_TYPE_LIVE_RCMD' || 
+                    (res.data.modules && res.data.modules.module_dynamic && 
+                     res.data.modules.module_dynamic.major && 
+                     res.data.modules.module_dynamic.major.type === 'MAJOR_TYPE_LIVE_RCMD');
+
+                if (isLiveDynamic) {
+                    logger.info(`[CheckDynamic] Skipping LIVE_RCMD dynamic ${dynamicId} to avoid duplicate notification.`);
+                    // 仍然更新状态，以免下次检查时被视为新动态（虽然 checkUserLive 会处理，但为了状态一致性）
+                    if (!force && dynamicTime > (sub.lastDynamicTime || 0)) {
+                        sub.lastDynamicId = dynamicId;
+                        sub.lastDynamicTime = dynamicTime;
+                        this.saveSubscriptions(); // Save state
+                    }
+                    return; // Skip processing this dynamic
+                }
 
                 // 确保 sub.lastDynamicTime 存在
                 if (!sub.lastDynamicTime) sub.lastDynamicTime = 0;
@@ -442,8 +461,6 @@ class SubscriptionService {
             if (epId && (sub.lastEpId === null || sub.lastEpId !== epId)) {
                 let updateEpoch = Date.now();
                 try {
-                    const base64Image = await imageGenerator.generatePreviewCard({ status: 'success', type: 'bangumi', data: info }, 'bangumi');
-                    const seasonUrl = `https://www.bilibili.com/bangumi/play/ss${sub.seasonId}`;
                     const epUrl = `https://www.bilibili.com/bangumi/play/ep${epId}`;
                     const updateTimeRaw = newEp.pub_time || newEp.release_time || info.publish?.pub_time || '';
                     let updateTimeStr = '';
@@ -458,10 +475,10 @@ class SubscriptionService {
                     if (!updateTimeStr) {
                         updateTimeStr = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
                     }
-                    this.notifyGroups(sub.groupIds, [
-                        { type: 'image', data: { file: `base64://${base64Image}` } },
-                        { type: 'text', data: { text: `${epUrl}` } }
-                    ]);
+                    
+                    // Use notifyGroupsWithImage to handle group-specific configs (dark mode, labels)
+                    await this.notifyGroupsWithImage(sub.groupIds, { status: 'success', type: 'bangumi', data: info }, 'bangumi', epUrl);
+                    
                 } catch (e) {
                     logger.error(`[CheckBangumi] Error generating image for season ${sub.seasonId}:`, e);
                     this.notifyGroups(sub.groupIds, `番剧预览生成失败，已降级为文本链接：\nhttps://www.bilibili.com/bangumi/play/ep${epId}`);
@@ -546,9 +563,25 @@ class SubscriptionService {
             
             // Access label config logic (replicating logic from imageGenerator to key correctly)
             const labelConfig = config.getGroupConfig(groupId, 'labelConfig');
-            const showLabel = (!labelConfig || labelConfig[type] !== false);
             
-            const key = `night:${isNight}_label:${showLabel}`;
+            // Replicate subtype logic from imageGenerator
+            let subtype = type;
+            if (type === 'bangumi' && data.data) {
+                const st = data.data.season_type;
+                if (st === 2) subtype = 'movie';
+                else if (st === 3) subtype = 'doc';
+                else if (st === 4) subtype = 'guocha';
+                else if (st === 5) subtype = 'tv';
+                else if (st === 7) subtype = 'variety';
+            }
+            
+            const showLabel = (labelConfig && labelConfig[subtype] !== undefined) 
+                ? labelConfig[subtype] 
+                : (labelConfig && labelConfig[type] !== false);
+            
+            const showId = config.getGroupConfig(groupId, 'showId');
+            
+            const key = `night:${isNight}_label:${showLabel}_showId:${showId}`;
             
             if (!groupsByConfig.has(key)) {
                 groupsByConfig.set(key, []);
@@ -561,9 +594,10 @@ class SubscriptionService {
             try {
                 // Use the first group as representative for generation
                 const representativeGroupId = targetGroupIds[0];
+                const showId = config.getGroupConfig(representativeGroupId, 'showId');
                 
                 // Generate image
-                const base64Image = await imageGenerator.generatePreviewCard(data, type, representativeGroupId);
+                const base64Image = await imageGenerator.generatePreviewCard(data, type, representativeGroupId, showId);
                 
                 // Send
                 this.notifyGroups(targetGroupIds, [
