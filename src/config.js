@@ -168,6 +168,7 @@ const config = {
     // Save configuration to file (Only dynamic fields)
     save: function() {
         const data = {
+            aiProbability: this.aiProbability,
             aiContextLimit: this.aiContextLimit,
             blacklistedQQs: this.blacklistedQQs,
             enabledGroups: this.enabledGroups,

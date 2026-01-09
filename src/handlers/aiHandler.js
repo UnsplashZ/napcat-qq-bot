@@ -241,16 +241,9 @@ class AiHandler {
 
     shouldReply(message, isAt, groupId) {
         if (isAt) return true;
-        // Check if AI is enabled for this group (if there's a switch, but currently it's probability)
-        // User mentioned "AI context menu" -> "ai上下文菜单" switch?
-        // If user wants a switch, we might need a boolean config like 'aiEnabled'
-        // But for now, user said "AI context menu" which might be "aiContextLimit".
-        // Let's stick to probability for now or check if there's a new requirement.
-        // But user said "AI context menu... adjusted to follow group ID".
-        // If it means "Probability", I should use getGroupConfig for probability too?
-        // User didn't mention probability explicitly, but "AI context menu" usually implies the feature itself.
-        // I'll leave probability global unless user asked, but I will pass groupId to be safe.
-        return Math.random() < config.aiProbability;
+        // Check probability (support group override)
+        const probability = config.getGroupConfig(groupId, 'aiProbability');
+        return Math.random() < probability;
     }
     
     // Helper to add message, trim context, and trigger save

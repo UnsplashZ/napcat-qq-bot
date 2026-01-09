@@ -485,47 +485,58 @@ class MessageHandler {
             }
             this.groupListCmdCd.set(groupId, now);
 
-            const subs = subscriptionService.getSubscriptionsByGroup(groupId);
-            
-            // Get Account Follows (merged view)
-            let followings = [];
-            try {
-                 // Only show if sync is enabled or if user specifically asked?
-                 // User asked to merge them.
-                 // Let's fetch them if available.
-                 followings = subscriptionService.cookieFollowings || [];
-            } catch (e) {
-                 logger.error('Error fetching followings for merge view:', e);
-            }
+            // Notify user about refresh
+            this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '正在刷新关注列表并生成图片，请稍候...' } }]);
 
-            if (subs.length === 0 && followings.length === 0) {
-                this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '本群暂无订阅，且账户关注列表为空。' } }]);
-            } else {
-                // Notify processing
+            (async () => {
+                let userSubs = [];
+                let bangumiSubs = [];
+                try {
+                    // 1. Refresh Cookie Followings first
+                    await subscriptionService.refreshCookieFollowings();
 
-                const userSubs = subs.filter(s => s.type === 'user');
-                const bangumiSubs = subs.filter(s => s.type === 'bangumi');
-
-                (async () => {
+                    // 2. Fetch Subscriptions & Followings
+                    const subs = subscriptionService.getSubscriptionsByGroup(groupId);
+                    
+                    // Get Account Follows (merged view)
+                    let followings = [];
                     try {
-                        // Fetch user details for Group Subs
-                        const userDetailsPromises = userSubs.map(async (sub) => {
+                         followings = subscriptionService.cookieFollowings || [];
+                    } catch (e) {
+                         logger.error('Error fetching followings for merge view:', e);
+                    }
+
+                    if (subs.length === 0 && followings.length === 0) {
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '本群暂无订阅，且账户关注列表为空。' } }]);
+                        return;
+                    }
+
+                    userSubs = subs.filter(s => s.type === 'user');
+                    bangumiSubs = subs.filter(s => s.type === 'bangumi');
+
+                    // Fetch user details for Group Subs (with concurrency limit and lightweight API)
+                    const detailedUserSubs = [];
+                    const CONCURRENCY_LIMIT = 3; // Limit parallel requests to avoid rate limits
+                    
+                    for (let i = 0; i < userSubs.length; i += CONCURRENCY_LIMIT) {
+                         const chunk = userSubs.slice(i, i + CONCURRENCY_LIMIT);
+                         const chunkResults = await Promise.all(chunk.map(async (sub) => {
                             try {
-                                const info = await biliApi.getUserInfo(sub.uid);
+                                // Use lighter getUserCard instead of full getUserInfo
+                                const info = await biliApi.getUserCard(sub.uid);
                                 if (info && info.status === 'success' && info.data) {
                                     return {
                                         ...sub,
-                                        name: info.data.name || sub.name, // Update name if available
+                                        name: info.data.name || sub.name, 
                                         face: info.data.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg',
-                                        level: info.data.level || 0,
-                                        pendant: info.data.pendant || {},
-                                        fans_medal: info.data.fans_medal || {}
+                                        level: 0,
+                                        pendant: {},
+                                        fans_medal: {}
                                     };
                                 }
                             } catch (e) {
-                                logger.error(`Failed to fetch info for user ${sub.uid}`, e);
+                                logger.error(`Failed to fetch card for user ${sub.uid}`, e);
                             }
-                            // Fallback if fetch fails
                             return {
                                 ...sub,
                                 face: 'https://i0.hdslb.com/bfs/face/member/noface.jpg',
@@ -533,56 +544,51 @@ class MessageHandler {
                                 pendant: {},
                                 fans_medal: {}
                             };
-                        });
-
-                        const detailedUserSubs = await Promise.all(userDetailsPromises);
-
-                        const data = {
-                            users: detailedUserSubs,
-                            bangumis: bangumiSubs,
-                            accountFollows: followings // Pass account follows
-                        };
-
-                        const showId = config.getGroupConfig(groupId, 'showId');
-                        
-                        // Check if we need to filter account follows based on sync group config?
-                        // The original /账户关注列表 command filtered based on sync group.
-                        // "If enableSync and syncGroup, filter..."
-                        // Let's replicate that logic for the "Account Follows" section of the merged view.
-                        const enableSync = config.getGroupConfig(groupId, 'enableCookieSync');
-                        const syncGroup = config.getGroupConfig(groupId, 'cookieSyncGroupName');
-                        
-                        if (enableSync && syncGroup) {
-                            data.accountFollows = data.accountFollows.filter(u => u.biliGroups && u.biliGroups.includes(syncGroup));
-                            data.accountFollowsTitle = `关注列表 - ${syncGroup}`;
-                        } else {
-                            data.accountFollowsTitle = '账户关注列表';
-                        }
-
-
-                        const base64Image = await imageGenerator.generateSubscriptionList(data, groupId, showId);
-                        this.sendGroupMessage(ws, groupId, [{ type: 'image', data: { file: `base64://${base64Image}` } }]);
-
-                    } catch (e) {
-                        logger.error('Error generating subscription list image:', e);
-                        // Fallback to text
-                        let message = '生成图片失败，显示文本列表：\n';
-                        if (userSubs.length) {
-                            message += '\n【本群用户订阅】\n';
-                            userSubs.forEach((sub, index) => {
-                                message += `${index + 1}. ${sub.name} (UID: ${sub.uid})\n`;
-                            });
-                        }
-                        if (bangumiSubs.length) {
-                            message += '\n【本群番剧订阅】\n';
-                            bangumiSubs.forEach((sub, index) => {
-                                message += `${index + 1}. ${sub.title} (SID: ${sub.seasonId})\n`;
-                            });
-                        }
-                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: message } }]);
+                        }));
+                        detailedUserSubs.push(...chunkResults);
                     }
-                })();
-            }
+
+                    const data = {
+                        users: detailedUserSubs,
+                        bangumis: bangumiSubs,
+                        accountFollows: followings // Pass account follows
+                    };
+
+                    const showId = config.getGroupConfig(groupId, 'showId');
+                    
+                    const enableSync = config.getGroupConfig(groupId, 'enableCookieSync');
+                    const syncGroup = config.getGroupConfig(groupId, 'cookieSyncGroupName');
+                    
+                    if (enableSync && syncGroup) {
+                        data.accountFollows = data.accountFollows.filter(u => u.biliGroups && u.biliGroups.includes(syncGroup));
+                        data.accountFollowsTitle = `关注列表 - ${syncGroup}`;
+                    } else {
+                        data.accountFollowsTitle = '账户关注列表';
+                    }
+
+
+                    const base64Image = await imageGenerator.generateSubscriptionList(data, groupId, showId);
+                    this.sendGroupMessage(ws, groupId, [{ type: 'image', data: { file: `base64://${base64Image}` } }]);
+
+                } catch (e) {
+                    logger.error('Error generating subscription list image:', e);
+                    // Fallback to text
+                    let message = '生成图片失败，显示文本列表：\n';
+                    if (userSubs.length) {
+                        message += '\n【本群用户订阅】\n';
+                        userSubs.forEach((sub, index) => {
+                            message += `${index + 1}. ${sub.name} (UID: ${sub.uid})\n`;
+                        });
+                    }
+                    if (bangumiSubs.length) {
+                        message += '\n【本群番剧订阅】\n';
+                        bangumiSubs.forEach((sub, index) => {
+                            message += `${index + 1}. ${sub.title} (SID: ${sub.seasonId})\n`;
+                        });
+                    }
+                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: message } }]);
+                }
+            })();
             return;
         }
 
@@ -1135,6 +1141,26 @@ class MessageHandler {
                  return;
             }
             
+            // 10. AI概率 (/设置 AI概率 <数值>)
+            if (subCommand === 'AI概率') {
+                 const value = parseFloat(parts[2]);
+                 if (!isNaN(value) && value >= 0 && value <= 1) {
+                     if (groupId) {
+                        if (!config.groupConfigs[groupId]) config.groupConfigs[groupId] = {};
+                        config.groupConfigs[groupId].aiProbability = value;
+                        config.save();
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `本群 AI 随机回复概率已设置为 ${value} (${(value*100).toFixed(0)}%)。` } }]);
+                     } else {
+                        config.aiProbability = value;
+                        config.save();
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `全局 AI 随机回复概率已设置为 ${value} (${(value*100).toFixed(0)}%)。` } }]);
+                     }
+                 } else {
+                      this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '请输入有效的概率 (0.0 - 1.0)。' } }]);
+                 }
+                 return;
+            }
+
             // 10. 深色模式 (/设置 深色模式 <开|关|定时>)
             if (subCommand === '深色模式') {
                 const mode = parts[2];

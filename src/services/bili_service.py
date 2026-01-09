@@ -740,6 +740,19 @@ async def get_media_info(media_id):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+async def get_user_card(uid):
+    try:
+        u = user.User(uid=int(uid), credential=load_credential())
+        user_info = await u.get_user_info()
+        data = {
+            "uid": user_info.get('mid', uid),
+            "name": user_info.get('name', ''),
+            "face": user_info.get('face', '')
+        }
+        return {"status": "success", "type": "user_card", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 async def get_user_info(uid):
     try:
         u = user.User(uid=int(uid), credential=load_credential())
@@ -994,6 +1007,11 @@ async def main():
     elif command == "user_info":
         uid = sys.argv[2]
         result = await get_user_info(uid)
+        print(json.dumps(result, ensure_ascii=False))
+
+    elif command == "user_card":
+        uid = sys.argv[2]
+        result = await get_user_card(uid)
         print(json.dumps(result, ensure_ascii=False))
 
     elif command == "my_followings":

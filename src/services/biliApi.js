@@ -104,6 +104,10 @@ class BiliApi {
         return this.runCommand('user_info', [uid]);
     }
 
+    async getUserCard(uid) {
+        return this.runCommand('user_card', [uid]);
+    }
+
     async getEpInfo(epId) {
         return this.runCommand('ep', [epId]);
     }

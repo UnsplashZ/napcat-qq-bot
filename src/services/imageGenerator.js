@@ -302,32 +302,38 @@ class ImageGenerator {
         const { minWidth, width } = viewport;
 
         // Load Custom Fonts
-        const fontDir = path.join(__dirname, '../../fonts/custom');
+        const fontDirs = [
+            path.join(__dirname, '../../fonts/custom'),
+            path.join(__dirname, '../../fonts/mi')
+        ];
         let customFontsCss = '';
         let customFontFamilies = [];
-        if (fs.existsSync(fontDir)) {
-            try {
-                const files = fs.readdirSync(fontDir);
-                files.forEach(file => {
-                    const ext = path.extname(file).toLowerCase();
-                    if (['.ttf', '.otf', '.woff', '.woff2'].includes(ext)) {
-                        const fontName = path.basename(file, ext);
-                        const fontPath = path.join(fontDir, file);
-                        const fontBuffer = fs.readFileSync(fontPath);
-                        const base64Font = fontBuffer.toString('base64');
-                        customFontsCss += `
-                            @font-face {
-                                font-family: "${fontName}";
-                                src: url(data:font/${ext.slice(1)};charset=utf-8;base64,${base64Font}) format('${ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext.slice(1)}');
-                            }
-                        `;
-                        customFontFamilies.push(`"${fontName}"`);
-                    }
-                });
-            } catch (e) {
-                logger.error('Failed to load custom fonts:', e);
+
+        fontDirs.forEach(fontDir => {
+            if (fs.existsSync(fontDir)) {
+                try {
+                    const files = fs.readdirSync(fontDir);
+                    files.forEach(file => {
+                        const ext = path.extname(file).toLowerCase();
+                        if (['.ttf', '.otf', '.woff', '.woff2'].includes(ext)) {
+                            const fontName = path.basename(file, ext);
+                            const fontPath = path.join(fontDir, file);
+                            const fontBuffer = fs.readFileSync(fontPath);
+                            const base64Font = fontBuffer.toString('base64');
+                            customFontsCss += `
+                                @font-face {
+                                    font-family: "${fontName}";
+                                    src: url(data:font/${ext.slice(1)};charset=utf-8;base64,${base64Font}) format('${ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext.slice(1)}');
+                                }
+                            `;
+                            customFontFamilies.push(`"${fontName}"`);
+                        }
+                    });
+                } catch (e) {
+                    logger.error(`Failed to load custom fonts from ${fontDir}:`, e);
+                }
             }
-        }
+        });
 
         return `
             <style>
@@ -2247,6 +2253,7 @@ class ImageGenerator {
                     box-sizing: border-box;
                     width: 100%;
                     display: inline-block;
+                    border-radius: 20px;
                 }
 
                 .card {
@@ -2497,6 +2504,14 @@ class ImageGenerator {
                             <span class="cmd-desc">设置解析标签</span>
                         </div>
                         <div class="cmd-item">
+                            <span class="cmd-code">/设置 AI上下文 &lt;条数&gt;</span>
+                            <span class="cmd-desc">设置 AI 上下文限制</span>
+                        </div>
+                        <div class="cmd-item">
+                            <span class="cmd-code">/设置 AI概率 &lt;0-1&gt;</span>
+                            <span class="cmd-desc">设置 AI 随机回复概率</span>
+                        </div>
+                        <div class="cmd-item">
                             <span class="cmd-code">/设置 深色模式</span>
                             <span class="cmd-desc">配置深色模式</span>
                         </div>
@@ -2566,7 +2581,7 @@ class ImageGenerator {
         const buffer = await container.screenshot({
             type: 'webp',
             quality: 80,  // 使用 WebP 压缩体积
-            omitBackground: false
+            omitBackground: true
         });
 
         await page.close();
