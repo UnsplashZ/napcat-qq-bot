@@ -2,6 +2,7 @@
 node_modules/
 package-lock.json
 yarn.lock
+venv/
 
 # 日志
 logs/
@@ -12,9 +13,12 @@ temp/
 *.png
 *.jpg
 *.jpeg
+__pycache__/
 
 # 配置文件(包含敏感信息)
 src/config.js
+config/
+data/
 
 # 编辑器
 .vscode/
