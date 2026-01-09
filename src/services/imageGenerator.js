@@ -319,11 +319,23 @@ class ImageGenerator {
                             const fontPath = path.join(fontDir, file);
                             const fontBuffer = fs.readFileSync(fontPath);
                             const base64Font = fontBuffer.toString('base64');
+                            // 简单的文件名判断逻辑：如果文件名包含 VF 或 Variable，或者用户明确希望某些字体作为 Variable 处理
+                            // 实际上，对于静态字体声明 font-weight: 100 900 可能会导致浏览器强制将其作为该范围内所有字重的唯一匹配
+                            // 从而导致无法使用伪粗体（Synthesized Bold），或者在某些环境下渲染异常。
+                            // 更稳妥的做法是：仅当确信是可变字体时才添加范围声明。
+                            // 但由于我们无法在纯 Node 环境轻易解析字体文件内部元数据（除非引入 opentype.js 等库），
+                            // 这里我们可以采取一种折中方案：默认不加范围，除非文件名暗示它是可变字体。
+                            // 或者，我们可以生成两个规则：一个带范围，一个不带？不，CSS会覆盖。
+                            
+                            // 改进策略：
+                            // 1. 尝试检测文件名中的关键词
+                            const isVariable = /VF|Variable/i.test(fontName);
+                            
                             customFontsCss += `
                                 @font-face {
                                     font-family: "${fontName}";
                                     src: url(data:font/${ext.slice(1)};charset=utf-8;base64,${base64Font}) format('${ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext.slice(1)}');
-                                    font-weight: 100 900;
+                                    ${isVariable ? 'font-weight: 100 900;' : ''}
                                     font-style: normal;
                                 }
                             `;
