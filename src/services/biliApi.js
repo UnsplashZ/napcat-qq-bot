@@ -112,8 +112,9 @@ class BiliApi {
         return this.runCommand('media', [mediaId]);
     }
 
-    async getMyFollowings() {
-        return this.runCommand('my_followings');
+    async getMyFollowings(groupName) {
+        const args = groupName ? [groupName] : [];
+        return this.runCommand('my_followings', args);
     }
 }
 

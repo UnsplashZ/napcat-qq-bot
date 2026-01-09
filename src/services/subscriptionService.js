@@ -276,39 +276,99 @@ class SubscriptionService {
     async refreshCookieFollowings() {
         logger.info('Refreshing cookie followings...');
         try {
-            const res = await biliApi.getMyFollowings();
-            if (res.status === 'success' && res.data) {
-                // Preserve state from existing in-memory list
-                const stateMap = new Map();
-                if (this.cookieFollowings && this.cookieFollowings.length > 0) {
-                    for (const old of this.cookieFollowings) {
-                        if (old.lastDynamicId || old.lastLiveStatus) {
-                            stateMap.set(String(old.uid), {
-                                lastDynamicId: old.lastDynamicId,
-                                lastDynamicTime: old.lastDynamicTime,
-                                lastLiveStatus: old.lastLiveStatus
-                            });
-                        }
+            // 1. Identify what groups we need to fetch
+            const neededGroups = new Set();
+            let needAll = false;
+
+            // Check config for active sync groups
+            for (const groupId in config.groupConfigs) {
+                if (config.getGroupConfig(groupId, 'enableCookieSync')) {
+                    const groupName = config.getGroupConfig(groupId, 'cookieSyncGroupName');
+                    if (groupName) {
+                        neededGroups.add(groupName);
+                    } else {
+                        needAll = true;
                     }
                 }
-
-                this.cookieFollowings = res.data;
-
-                // Restore state
-                for (const newItem of this.cookieFollowings) {
-                    const state = stateMap.get(String(newItem.uid));
-                    if (state) {
-                        newItem.lastDynamicId = state.lastDynamicId;
-                        newItem.lastDynamicTime = state.lastDynamicTime;
-                        newItem.lastLiveStatus = state.lastLiveStatus;
-                    }
-                }
-
-                this.saveFollowers();
-                logger.info(`Refreshed cookie followings: ${this.cookieFollowings.length} users.`);
-            } else {
-                logger.warn(`Failed to refresh cookie followings: ${res.message}`);
             }
+
+            if (neededGroups.size === 0 && !needAll) {
+                logger.info('No groups have enabled cookie sync. Skipping refresh.');
+                return;
+            }
+
+            const newFollowingsMap = new Map(); // uid -> user object with biliGroups
+
+            // Helper to merge user into map
+            const mergeUser = (user, groupTag) => {
+                const uid = String(user.uid);
+                if (!newFollowingsMap.has(uid)) {
+                    newFollowingsMap.set(uid, {
+                        ...user,
+                        biliGroups: [] 
+                    });
+                }
+                const entry = newFollowingsMap.get(uid);
+                if (groupTag && !entry.biliGroups.includes(groupTag)) {
+                    entry.biliGroups.push(groupTag);
+                }
+            };
+
+            // 2. Fetch "All" if needed
+            if (needAll) {
+                logger.info('Fetching ALL followings...');
+                const res = await biliApi.getMyFollowings();
+                if (res.status === 'success' && res.data) {
+                    for (const u of res.data) {
+                        mergeUser(u, 'ALL'); // Mark as belonging to ALL set
+                    }
+                } else {
+                    logger.warn(`Failed to fetch ALL followings: ${res.message}`);
+                }
+            }
+
+            // 3. Fetch specific groups
+            for (const groupName of neededGroups) {
+                logger.info(`Fetching followings for group: ${groupName}...`);
+                const res = await biliApi.getMyFollowings(groupName);
+                if (res.status === 'success' && res.data) {
+                    for (const u of res.data) {
+                        mergeUser(u, groupName);
+                    }
+                } else {
+                    logger.warn(`Failed to fetch followings for group ${groupName}: ${res.message}`);
+                }
+            }
+
+            // 4. Update state and save
+            // Preserve state from existing in-memory list
+            const stateMap = new Map();
+            if (this.cookieFollowings && this.cookieFollowings.length > 0) {
+                for (const old of this.cookieFollowings) {
+                    if (old.lastDynamicId || old.lastLiveStatus) {
+                        stateMap.set(String(old.uid), {
+                            lastDynamicId: old.lastDynamicId,
+                            lastDynamicTime: old.lastDynamicTime,
+                            lastLiveStatus: old.lastLiveStatus
+                        });
+                    }
+                }
+            }
+
+            this.cookieFollowings = Array.from(newFollowingsMap.values());
+
+            // Restore state
+            for (const newItem of this.cookieFollowings) {
+                const state = stateMap.get(String(newItem.uid));
+                if (state) {
+                    newItem.lastDynamicId = state.lastDynamicId;
+                    newItem.lastDynamicTime = state.lastDynamicTime;
+                    newItem.lastLiveStatus = state.lastLiveStatus;
+                }
+            }
+
+            this.saveFollowers();
+            logger.info(`Refreshed cookie followings: ${this.cookieFollowings.length} unique users.`);
         } catch (e) {
             logger.error('Error refreshing cookie followings:', e);
         }
@@ -452,35 +512,55 @@ class SubscriptionService {
         }
 
         // 2. Add cookie followings for groups that enabled sync
-        const syncGroups = [];
+        // Identify which groups are syncing what
+        const groupSyncRules = []; // [{ groupId, targetBiliGroup }]
+        
         for (const groupId in config.groupConfigs) {
             if (config.getGroupConfig(groupId, 'enableCookieSync')) {
-                syncGroups.push(groupId);
+                const target = config.getGroupConfig(groupId, 'cookieSyncGroupName'); // null/undefined means ALL
+                groupSyncRules.push({ groupId, target });
             }
         }
 
-        if (syncGroups.length > 0 && this.cookieFollowings.length > 0) {
+        if (groupSyncRules.length > 0 && this.cookieFollowings.length > 0) {
             for (const following of this.cookieFollowings) {
                 const uid = String(following.uid);
-                if (subMap.has(uid)) {
-                    // Merge groups
-                    const entry = subMap.get(uid);
-                    for (const gid of syncGroups) {
-                        if (!entry.groupIds.includes(gid)) {
-                            entry.groupIds.push(gid);
+                
+                // Determine which QQ groups should subscribe to this user
+                const targetGroupIds = [];
+                for (const rule of groupSyncRules) {
+                    if (!rule.target) {
+                        // Rule wants ALL users
+                        targetGroupIds.push(rule.groupId);
+                    } else {
+                        // Rule wants specific group
+                        if (following.biliGroups && following.biliGroups.includes(rule.target)) {
+                            targetGroupIds.push(rule.groupId);
                         }
                     }
-                } else {
-                    // New entry from sync
-                    // USE STATE FROM following object if available
-                    subMap.set(uid, {
-                        uid: following.uid,
-                        groupIds: [...syncGroups],
-                        lastDynamicId: following.lastDynamicId || null,
-                        lastDynamicTime: following.lastDynamicTime || 0,
-                        lastLiveStatus: following.lastLiveStatus || '0',
-                        name: following.name
-                    });
+                }
+
+                if (targetGroupIds.length > 0) {
+                    if (subMap.has(uid)) {
+                        // Merge groups
+                        const entry = subMap.get(uid);
+                        for (const gid of targetGroupIds) {
+                            if (!entry.groupIds.includes(gid)) {
+                                entry.groupIds.push(gid);
+                            }
+                        }
+                    } else {
+                        // New entry from sync
+                        // USE STATE FROM following object if available
+                        subMap.set(uid, {
+                            uid: following.uid,
+                            groupIds: targetGroupIds,
+                            lastDynamicId: following.lastDynamicId || null,
+                            lastDynamicTime: following.lastDynamicTime || 0,
+                            lastLiveStatus: following.lastLiveStatus || '0',
+                            name: following.name
+                        });
+                    }
                 }
             }
         }

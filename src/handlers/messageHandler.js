@@ -197,7 +197,7 @@ class MessageHandler {
                     info = await biliApi.getArticleInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'article', groupId);
+                            base64Image = await imageGenerator.generatePreviewCard(info, info.type, groupId);
                             url = `https://www.bilibili.com/read/cv${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -235,7 +235,7 @@ class MessageHandler {
                     info = await biliApi.getOpusInfo(id);
                     if (info.status === 'success') {
                         try {
-                            base64Image = await imageGenerator.generatePreviewCard(info, 'article', groupId);
+                            base64Image = await imageGenerator.generatePreviewCard(info, info.type, groupId);
                             url = `https://www.bilibili.com/opus/${id}`;
                             await this.sendGroupMessageWithFallback(ws, groupId, base64Image, url);
                             this.addLinkToCache(cacheKey);
@@ -1057,19 +1057,29 @@ class MessageHandler {
                 return;
             }
 
-            // 8. 关注同步 (/设置 关注同步 <开|关>)
+            // 8. 关注同步 (/设置 关注同步 <开|关> [B站分组名])
             if (subCommand === '关注同步') {
                 const action = parts[2];
+                const groupName = parts[3]; // Optional group name
+
                 if (action === '开') {
                     config.setGroupConfig(groupId, 'enableCookieSync', true);
-                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '已开启本群的关注列表同步功能。账户关注的用户将自动被视为本群订阅。' } }]);
+                    if (groupName) {
+                        config.setGroupConfig(groupId, 'cookieSyncGroupName', groupName);
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `已开启本群的关注列表同步功能，并绑定到B站分组：${groupName}。` } }]);
+                    } else {
+                        // If no group name provided, default to syncing all (clear specific group config)
+                        config.setGroupConfig(groupId, 'cookieSyncGroupName', null);
+                        this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '已开启本群的关注列表同步功能。账户关注的所有用户将自动被视为本群订阅。' } }]);
+                    }
                     // Trigger refresh to ensure data is available
                     subscriptionService.refreshCookieFollowings();
                 } else if (action === '关') {
                     config.setGroupConfig(groupId, 'enableCookieSync', false);
+                    config.setGroupConfig(groupId, 'cookieSyncGroupName', null);
                     this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '已关闭本群的关注列表同步功能。' } }]);
                 } else {
-                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /设置 关注同步 <开|关>' } }]);
+                    this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /设置 关注同步 <开|关> [B站分组名]' } }]);
                 }
                 return;
             }

@@ -2469,8 +2469,8 @@ class ImageGenerator {
                             <span class="cmd-desc">查看本群/全局黑名单</span>
                         </div>
                         <div class="cmd-item">
-                            <span class="cmd-code">/设置 关注同步 &lt;开|关&gt;</span>
-                            <span class="cmd-desc">同步账户关注至群订阅</span>
+                            <span class="cmd-code">/设置 关注同步 &lt;开|关&gt; [分组]</span>
+                            <span class="cmd-desc">同步账户关注至群订阅(可指定分组)</span>
                         </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/设置 功能 &lt;开|关&gt;</span>
