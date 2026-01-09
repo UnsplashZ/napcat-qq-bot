@@ -111,6 +111,10 @@ class BiliApi {
     async getMediaInfo(mediaId) {
         return this.runCommand('media', [mediaId]);
     }
+
+    async getMyFollowings() {
+        return this.runCommand('my_followings');
+    }
 }
 
 module.exports = new BiliApi();

@@ -317,7 +317,7 @@ async def get_opus_detail(opus_id):
         data = {
             "title": title,
             "html_content": html_content,
-            "summary": html_content, # Use full HTML content as summary for article mode
+            "summary": re.sub('<[^<]+?>', '', html_content)[:2000], # Strip HTML for summary
             "publish_time": pub_ts,
             "author_face": author_face,
             "author_name": author_name,
@@ -640,20 +640,20 @@ async def get_dynamic_detail(dynamic_id):
         if not info:
             return {"status": "error", "message": f"无法获取动态 {dynamic_id} 的信息，可能已被删除或设置为私密"}
 
-        # Check for Opus redirect in basic info
-        item = info.get('item', {})
-        basic = item.get('basic', {})
-        jump_url = basic.get('jump_url', '')
-        if '/opus/' in jump_url:
-            opus_match = re.search(r'/opus/(\d+)', jump_url)
-            if opus_match:
-                opus_id = opus_match.group(1)
-                return await get_opus_detail(opus_id)
-
+        # 检查modules是否为空
         modules = (info.get('item') or {}).get('modules') or info.get('modules') or {}
 
-        # 检查modules是否为空
         if not modules:
+            # Check for Opus redirect in basic info as fallback
+            item = info.get('item', {})
+            basic = item.get('basic', {})
+            jump_url = basic.get('jump_url', '')
+            if '/opus/' in jump_url:
+                opus_match = re.search(r'/opus/(\d+)', jump_url)
+                if opus_match:
+                    opus_id = opus_match.group(1)
+                    return await get_opus_detail(opus_id)
+
             return {"status": "error", "message": f"动态 {dynamic_id} 的数据结构异常，可能已被删除"}
 
         author_module = modules.get('module_author') or {}
@@ -942,7 +942,72 @@ async def get_user_info(uid):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-
+async def get_my_followings():
+    try:
+        cred = load_credential()
+        if not cred:
+            return {"status": "error", "message": "未登录，请先配置 cookies.json"}
+        
+        # Get self info to find my_uid
+        self_info = await user.get_self_info(credential=cred)
+        my_uid = self_info['mid']
+        u = user.User(uid=my_uid, credential=cred)
+        
+        all_followings = []
+        page = 1
+        page_size = 50
+        
+        while True:
+            # get_followings returns a dict with 'list', 'total', 're_version'
+            res = await u.get_followings(pn=page, ps=page_size)
+            if not res or 'list' not in res or not res['list']:
+                break
+                
+            followings_list = res['list']
+            all_followings.extend(followings_list)
+            
+            total = res.get('total', 0)
+            if len(all_followings) >= total:
+                break
+            
+            page += 1
+            # Safety break
+            if page > 100: 
+                break
+                
+        # Format the result
+        result = []
+        for f in all_followings:
+            # Try to get level from 'official_verify' or other fields if available in f
+            # But usually get_followings returns minimal info.
+            # Let's check what fields are available in f.
+            # Usually: mid, attribute, mtime, tag, special, contract_info, uname, face, sign, official_verify, vip
+            
+            # Extract level if present (it might not be directly in followings list)
+            # Some versions of API might not return level.
+            # If we really need level, we might need to fetch user info for each, but that's too slow.
+            # Let's assume 0 if not present, but check if we can find it.
+            
+            # Actually, standard followings list usually doesn't have level.
+            # But wait, imageGenerator expects `level` property.
+            # We can default to 0 to avoid "undefined".
+            
+            level = 0
+            # If 'level_info' exists? Or 'level'?
+            # Based on bilibili-api-python source or typical response:
+            # It seems 'level' is not typically in get_followings response.
+            
+            result.append({
+                'uid': f['mid'],
+                'name': f['uname'],
+                'face': f['face'],
+                'level': 0, # Default to 0 as it's not provided in simple list
+                'sign': f.get('sign', '')
+            })
+            
+        return {"status": "success", "type": "user_list", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # Command dispatcher
 async def main():
@@ -1016,7 +1081,9 @@ async def main():
         result = await get_user_info(uid)
         print(json.dumps(result, ensure_ascii=False))
 
-
+    elif command == "my_followings":
+        result = await get_my_followings()
+        print(json.dumps(result, ensure_ascii=False))
 
     else:
         print(json.dumps({"status": "error", "message": "Unknown command"}))

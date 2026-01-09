@@ -80,6 +80,16 @@ const config = {
         return this[key];
     },
 
+    // Helper to set config value for a group
+    setGroupConfig: function(groupId, key, value) {
+        if (!groupId) return;
+        if (!this.groupConfigs[groupId]) {
+            this.groupConfigs[groupId] = {};
+        }
+        this.groupConfigs[groupId][key] = value;
+        this.save();
+    },
+
     // Permission Checks
     isRootAdmin: function(userId) {
         return this.adminQQ && userId.toString() === this.adminQQ.toString();
