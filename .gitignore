@@ -44,3 +44,6 @@ logs/
 
 # Test
 test*
+data/contexts/1065812436.json
+data/contexts/469615909.json
+data/vectors/1065812436.json

@@ -2057,7 +2057,7 @@ class ImageGenerator {
 
                 <div class="section">
                     <div class="section-title">
-                        用户
+                        本群订阅 (用户)
                         <span class="count-badge">${data.users.length}</span>
                     </div>
                     ${data.users.length > 0 ? `
@@ -2085,7 +2085,7 @@ class ImageGenerator {
 
                 <div class="section" style="${data.bangumis.length === 0 ? 'display:none;' : ''}">
                     <div class="section-title">
-                        番剧
+                        本群订阅 (番剧)
                         <span class="count-badge">${data.bangumis.length}</span>
                     </div>
                     ${data.bangumis.length > 0 ? `
@@ -2098,6 +2098,34 @@ class ImageGenerator {
                             `).join('')}
                         </div>
                     ` : '<div class="empty-tip">暂无番剧订阅</div>'}
+                </div>
+
+                <div class="section" style="${(!data.accountFollows || data.accountFollows.length === 0) ? 'display:none;' : ''}">
+                    <div class="section-title">
+                        ${data.accountFollowsTitle || '账户关注列表'}
+                        <span class="count-badge">${data.accountFollows ? data.accountFollows.length : 0}</span>
+                    </div>
+                    ${(data.accountFollows && data.accountFollows.length > 0) ? `
+                        <div class="user-list">
+                            ${data.accountFollows.map(u => {
+                                return `
+                                <div class="user-card">
+                                    <div class="avatar-container">
+                                        <img src="${u.face}" class="avatar" crossorigin="anonymous">
+                                    </div>
+                                    <div class="user-info">
+                                        <div class="user-name-row">
+                                            <span class="user-name">${u.name}</span>
+                                        </div>
+                                        <div class="user-details">
+                                            ${show_id ? `<span class="uid">UID:${u.uid}</span>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    ` : '<div class="empty-tip">暂无关注</div>'}
                 </div>
             </div>
             </div>
@@ -2387,20 +2415,12 @@ class ImageGenerator {
                     <div class="section-title">用户指令</div>
                     <div class="cmd-list">
                         <div class="cmd-item">
-                            <span class="cmd-code">/订阅列表</span>
-                            <span class="cmd-desc">查看本群分类订阅列表</span>
-                        </div>
-                        <div class="cmd-item">
-                            <span class="cmd-code">/账户关注列表</span>
-                            <span class="cmd-desc">查看登录账户的关注列表</span>
-                        </div>
-                        <div class="cmd-item">
-                            <span class="cmd-code">/清理上下文</span>
-                            <span class="cmd-desc">清理当前群组的 AI 对话记忆</span>
-                        </div>
-                        <div class="cmd-item">
                             <span class="cmd-code">@Bot &lt;内容&gt;</span>
                             <span class="cmd-desc">与 AI 进行对话</span>
+                        </div>
+                        <div class="cmd-item">
+                            <span class="cmd-code">/订阅列表</span>
+                            <span class="cmd-desc">查看本群订阅 & 账户关注</span>
                         </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/菜单</span>
@@ -2413,24 +2433,24 @@ class ImageGenerator {
                     <div class="section-title">管理指令<span class="cmd-tag tag-admin">群管</span></div>
                     <div class="cmd-list">
                         <div class="cmd-item">
-                            <span class="cmd-code">/查询订阅 &lt;uid&gt;</span>
-                            <span class="cmd-desc">立即检查某用户动态</span>
-                        </div>
-                        <div class="cmd-item">
                             <span class="cmd-code">/订阅用户 &lt;uid&gt;</span>
                             <span class="cmd-desc">订阅用户（动态+直播）</span>
-                        </div>
-                        <div class="cmd-item">
-                            <span class="cmd-code">/取消订阅用户 &lt;uid&gt;</span>
-                            <span class="cmd-desc">取消用户订阅</span>
                         </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/订阅番剧 &lt;season_id&gt;</span>
                             <span class="cmd-desc">订阅番剧新剧集更新</span>
                         </div>
                         <div class="cmd-item">
+                            <span class="cmd-code">/取消订阅用户 &lt;uid&gt;</span>
+                            <span class="cmd-desc">取消用户订阅</span>
+                        </div>
+                        <div class="cmd-item">
                             <span class="cmd-code">/取消订阅番剧 &lt;season_id&gt;</span>
                             <span class="cmd-desc">取消番剧订阅</span>
+                        </div>
+                        <div class="cmd-item">
+                            <span class="cmd-code">/查询订阅 &lt;uid&gt;</span>
+                            <span class="cmd-desc">立即检查某用户动态</span>
                         </div>
                     </div>
                 </div>
@@ -2461,24 +2481,16 @@ class ImageGenerator {
                     <div class="section-title">管理员菜单<span class="cmd-tag tag-admin">群管</span></div>
                     <div class="cmd-list">
                         <div class="cmd-item">
-                            <span class="cmd-code">/查询订阅 &lt;uid|用户名&gt;</span>
-                            <span class="cmd-desc">检查用户动态更新</span>
-                        </div>
-                        <div class="cmd-item">
-                            <span class="cmd-code">/查看黑名单</span>
-                            <span class="cmd-desc">查看本群/全局黑名单</span>
+                            <span class="cmd-code">/设置 功能 &lt;开|关&gt;</span>
+                            <span class="cmd-desc">开关Bot权限</span>
                         </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/设置 关注同步 &lt;开|关&gt; [分组]</span>
                             <span class="cmd-desc">同步账户关注至群订阅(可指定分组)</span>
                         </div>
                         <div class="cmd-item">
-                            <span class="cmd-code">/设置 功能 &lt;开|关&gt;</span>
-                            <span class="cmd-desc">开关Bot权限</span>
-                        </div>
-                        <div class="cmd-item">
                             <span class="cmd-code">/设置 黑名单 &lt;操作&gt;</span>
-                            <span class="cmd-desc">管理黑名单</span>
+                            <span class="cmd-desc">管理/查看黑名单</span>
                         </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/设置 标签 &lt;操作&gt;</span>
@@ -2496,16 +2508,16 @@ class ImageGenerator {
                             <span class="cmd-code">/设置 显示UID &lt;开|关&gt;</span>
                             <span class="cmd-desc">开关订阅列表UID</span>
                         </div>
+                        <div class="cmd-item">
+                            <span class="cmd-code">/查询订阅 &lt;uid|用户名&gt;</span>
+                            <span class="cmd-desc">检查用户动态更新</span>
+                        </div>
                     </div>
                 </div>
 
                 <div class="section">
                     <div class="section-title">系统菜单<span class="cmd-tag tag-root">Root</span></div>
                     <div class="cmd-list">
-                        <div class="cmd-item">
-                            <span class="cmd-code">/管理 &lt;群列表|清理&gt;</span>
-                            <span class="cmd-desc">查看状态或清理群数据</span>
-                        </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/设置 登录</span>
                             <span class="cmd-desc">获取登录二维码</span>
@@ -2515,12 +2527,20 @@ class ImageGenerator {
                             <span class="cmd-desc">验证登录状态</span>
                         </div>
                         <div class="cmd-item">
-                            <span class="cmd-code">/设置 轮询 &lt;秒数&gt;</span>
-                            <span class="cmd-desc">设置轮询间隔</span>
+                            <span class="cmd-code">/管理 新对话 [群号]</span>
+                            <span class="cmd-desc">重置 AI 对话记忆</span>
+                        </div>
+                        <div class="cmd-item">
+                            <span class="cmd-code">/管理 &lt;群列表|清理&gt;</span>
+                            <span class="cmd-desc">查看状态或清理群数据</span>
                         </div>
                         <div class="cmd-item">
                             <span class="cmd-code">/设置 管理员 &lt;添加|移除&gt;</span>
                             <span class="cmd-desc">设置本群管理员</span>
+                        </div>
+                        <div class="cmd-item">
+                            <span class="cmd-code">/设置 轮询 &lt;秒数&gt;</span>
+                            <span class="cmd-desc">设置轮询间隔</span>
                         </div>
                     </div>
                 </div>
