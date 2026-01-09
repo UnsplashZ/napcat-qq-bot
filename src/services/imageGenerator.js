@@ -303,8 +303,7 @@ class ImageGenerator {
 
         // Load Custom Fonts
         const fontDirs = [
-            path.join(__dirname, '../../fonts/custom'),
-            path.join(__dirname, '../../fonts/mi')
+            path.join(__dirname, '../../fonts/custom')
         ];
         let customFontsCss = '';
         let customFontFamilies = [];
@@ -832,6 +831,21 @@ class ImageGenerator {
                     box-shadow: var(--shadow-sm);
                 }
 
+                .video-stats {
+                    background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.2));
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                    border-radius: var(--radius-md);
+                }
+
+                .theme-dark .video-stats {
+                    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                }
+
                 .action-bar {
                     display: flex;
                     align-items: center;
@@ -1208,7 +1222,7 @@ class ImageGenerator {
                     </div>
                 </div>
                 <div class="title">${this._escapeHtml(info.title)}</div>
-                <div class="stats">
+                <div class="stats video-stats">
                     <span class="stat-item">${ICONS.view} ${this.formatNumber(info.view?.count || info.stat?.view)}</span>
                     <span class="stat-item">${ICONS.like} ${this.formatNumber(info.like || info.stat?.like)}</span>
                     <span class="stat-item">${ICONS.comment} ${this.formatNumber(info.reply || info.stat?.reply)}</span>
