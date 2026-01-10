@@ -56,6 +56,50 @@ class ImageGenerator {
         }
     }
 
+    _getCustomFonts() {
+        if (this.fontCache) return this.fontCache;
+
+        const fontDirs = [
+            path.join(__dirname, '../../fonts/custom')
+        ];
+        let customFontsCss = '';
+        let customFontFamilies = [];
+
+        fontDirs.forEach(fontDir => {
+            if (fs.existsSync(fontDir)) {
+                try {
+                    const files = fs.readdirSync(fontDir);
+                    files.forEach(file => {
+                        const ext = path.extname(file).toLowerCase();
+                        if (['.ttf', '.otf', '.woff', '.woff2'].includes(ext)) {
+                            const fontName = path.basename(file, ext);
+                            const fontPath = path.join(fontDir, file);
+                            const fontBuffer = fs.readFileSync(fontPath);
+                            const base64Font = fontBuffer.toString('base64');
+                            
+                            const isVariable = /VF|Variable/i.test(fontName);
+                            
+                            customFontsCss += `
+                                @font-face {
+                                    font-family: "${fontName}";
+                                    src: url(data:font/${ext.slice(1)};charset=utf-8;base64,${base64Font}) format('${ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext.slice(1)}');
+                                    ${isVariable ? 'font-weight: 100 900;' : ''}
+                                    font-style: normal;
+                                }
+                            `;
+                            customFontFamilies.push(`"${fontName}"`);
+                        }
+                    });
+                } catch (e) {
+                    logger.error(`Failed to load custom fonts from ${fontDir}:`, e);
+                }
+            }
+        });
+
+        this.fontCache = { css: customFontsCss, families: customFontFamilies };
+        return this.fontCache;
+    }
+
     isNightMode(groupId) {
         const nightMode = config.getGroupConfig(groupId, 'nightMode');
         if (!nightMode) return false;
@@ -302,51 +346,7 @@ class ImageGenerator {
         const { minWidth, width } = viewport;
 
         // Load Custom Fonts
-        const fontDirs = [
-            path.join(__dirname, '../../fonts/custom')
-        ];
-        let customFontsCss = '';
-        let customFontFamilies = [];
-
-        fontDirs.forEach(fontDir => {
-            if (fs.existsSync(fontDir)) {
-                try {
-                    const files = fs.readdirSync(fontDir);
-                    files.forEach(file => {
-                        const ext = path.extname(file).toLowerCase();
-                        if (['.ttf', '.otf', '.woff', '.woff2'].includes(ext)) {
-                            const fontName = path.basename(file, ext);
-                            const fontPath = path.join(fontDir, file);
-                            const fontBuffer = fs.readFileSync(fontPath);
-                            const base64Font = fontBuffer.toString('base64');
-                            // 简单的文件名判断逻辑：如果文件名包含 VF 或 Variable，或者用户明确希望某些字体作为 Variable 处理
-                            // 实际上，对于静态字体声明 font-weight: 100 900 可能会导致浏览器强制将其作为该范围内所有字重的唯一匹配
-                            // 从而导致无法使用伪粗体（Synthesized Bold），或者在某些环境下渲染异常。
-                            // 更稳妥的做法是：仅当确信是可变字体时才添加范围声明。
-                            // 但由于我们无法在纯 Node 环境轻易解析字体文件内部元数据（除非引入 opentype.js 等库），
-                            // 这里我们可以采取一种折中方案：默认不加范围，除非文件名暗示它是可变字体。
-                            // 或者，我们可以生成两个规则：一个带范围，一个不带？不，CSS会覆盖。
-                            
-                            // 改进策略：
-                            // 1. 尝试检测文件名中的关键词
-                            const isVariable = /VF|Variable/i.test(fontName);
-                            
-                            customFontsCss += `
-                                @font-face {
-                                    font-family: "${fontName}";
-                                    src: url(data:font/${ext.slice(1)};charset=utf-8;base64,${base64Font}) format('${ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext.slice(1)}');
-                                    ${isVariable ? 'font-weight: 100 900;' : ''}
-                                    font-style: normal;
-                                }
-                            `;
-                            customFontFamilies.push(`"${fontName}"`);
-                        }
-                    });
-                } catch (e) {
-                    logger.error(`Failed to load custom fonts from ${fontDir}:`, e);
-                }
-            }
-        });
+        const { css: customFontsCss, families: customFontFamilies } = this._getCustomFonts();
 
         return `
             <style>
@@ -403,7 +403,7 @@ class ImageGenerator {
                     width: fit-content;
                     min-width: ${minWidth}px;
                     max-width: ${width}px;
-                    font-family: ${customFontFamilies.length > 0 ? customFontFamilies.join(', ') + ', ' : ''}"MiSans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+                    font-family: ${customFontFamilies.length > 0 ? customFontFamilies.join(', ') + ', ' : ''}"MiSans", "MiSans L3", "Noto Sans SC", "Noto Color Emoji", sans-serif;
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
                 }
@@ -1878,11 +1878,14 @@ class ImageGenerator {
         const isNight = this.isNightMode(groupId);
         const themeClass = isNight ? 'theme-dark' : 'theme-light';
         
+        const { css: customFontsCss, families: customFontFamilies } = this._getCustomFonts();
+
         const html = `<!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
             <style>
+                ${customFontsCss}
                 :root {
                     --bg-gradient: linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%);
                     --card-bg: rgba(255, 255, 255, 0.75);
@@ -1909,7 +1912,7 @@ class ImageGenerator {
                     margin: 0;
                     padding: 0;
                     background: transparent;
-                    font-family: "MiSans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+                    font-family: ${customFontFamilies.length > 0 ? customFontFamilies.join(', ') + ', ' : ''}"MiSans", "MiSans L3", "Noto Sans SC", "Noto Color Emoji", sans-serif;
                 }
                 #wrapper {
                     padding: 40px;
@@ -2231,8 +2234,11 @@ class ImageGenerator {
         const isNight = this.isNightMode(groupId);
         const themeClass = isNight ? 'theme-dark' : 'theme-light';
 
+        const { css: customFontsCss, families: customFontFamilies } = this._getCustomFonts();
+
         const style = `
             <style>
+                ${customFontsCss}
                 :root {
                     --bg-gradient: linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%);
                     --card-bg: rgba(255, 255, 255, 0.75);
@@ -2272,7 +2278,7 @@ class ImageGenerator {
                     padding: 0;
                     background: transparent;
                     width: 1000px;
-                    font-family: "MiSans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+                    font-family: ${customFontFamilies.length > 0 ? customFontFamilies.join(', ') + ', ' : ''}"MiSans", "MiSans L3", "Noto Sans SC", "Noto Color Emoji", sans-serif;
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
                 }
