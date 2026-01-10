@@ -388,7 +388,7 @@ if [ $? -eq 0 ]; then
     echo "---------------------------------------------------"
     echo -e "${GREEN}部署全部完成！${NC}"
     echo "机器人服务已在后台运行。"
-    echo "如需查看机器人日志: $CMD logs -f bili-bot"
+    echo "如需查看机器人日志: docker logs -f bili-qq-bot"
 else
     echo -e "${RED}部署失败。${NC}"
 fi

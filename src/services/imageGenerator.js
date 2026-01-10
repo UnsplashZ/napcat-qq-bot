@@ -327,8 +327,8 @@ class ImageGenerator {
 
         const badgeBg = isNight ? '#23272D' : `linear-gradient(135deg, ${badgeColor}, ${this.adjustBrightness(badgeColor, -10)})`;
         const badgeTextColor = isNight ? badgeColor : '#fff';
-        const badgeShadow = isNight ? 'none' : `0 8px 24px ${this.hexToRgba(currentType.color, 0.40)}, var(--shadow-sm)`;
-        const badgeBorder = isNight ? `1px solid ${this.hexToRgba(badgeColor, 0.3)}` : 'none';
+        const badgeShadow = isNight ? '0 4px 12px rgba(0, 0, 0, 0.4)' : `0 8px 24px ${this.hexToRgba(currentType.color, 0.40)}, var(--shadow-sm)`;
+        const badgeBorder = isNight ? '1px solid rgba(255, 255, 255, 0.1)' : 'none';
 
         return {
             badgeColor,
@@ -479,6 +479,7 @@ class ImageGenerator {
                     font-size: 20px;
                 }
 
+
                 .decorate-bg {
                     position: absolute;
                     top: 0;
@@ -535,7 +536,7 @@ class ImageGenerator {
                     margin-bottom: 18px;
                     white-space: pre-wrap;
                     word-wrap: break-word;
-                    text-align: justify;
+                    text-align: left;
                 }
                 .text-content img {
                     max-width: 100%;
@@ -571,7 +572,7 @@ class ImageGenerator {
                     margin-top: 24px;
                     margin-bottom: 24px;
                     word-wrap: break-word;
-                    text-align: justify;
+                    text-align: left;
                 }
                 .article-body img {
                     max-width: 100%;
