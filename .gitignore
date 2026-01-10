@@ -30,6 +30,8 @@ data/vectors/*
 !data/contexts/.gitkeep
 !data/vectors/.gitkeep
 
+napcat/
+
 # Project Logs
 application.log
 logs/

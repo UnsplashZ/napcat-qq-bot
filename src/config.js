@@ -40,6 +40,10 @@ const config = {
     biliScriptPath: './src/services/bili_service.py',
     adminQQ: process.env.ADMIN_QQ,
     useBase64Send: process.env.USE_BASE64_SEND === 'true',
+    // NapCat temporary file path (host path mapped to container)
+    napcatTempPath: process.env.NAPCAT_TEMP_PATH || '/app/.config/QQ/tmp/',
+    // Path sent to NapCat (where NapCat looks for the file inside ITS container)
+    napcatReadPath: process.env.NAPCAT_READ_PATH || '/app/.config/QQ/tmp/',
 
     // --- Dynamic Configuration (config.json) ---
     // AI Context Limit

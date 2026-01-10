@@ -63,7 +63,7 @@ RUN npm config set registry https://registry.npmmirror.com && npm ci
 COPY . .
 
 # 创建必要的目录
-RUN mkdir -p logs temp && mkdir -p /root/napcat-data/QQ/NapCat/temp
+RUN mkdir -p logs temp config fonts && mkdir -p /app/.config/QQ/tmp/
 
 # 暴露端口 (如果有 Web 服务的话，没有则不需要，这里保留以防万一)
 # EXPOSE 3000

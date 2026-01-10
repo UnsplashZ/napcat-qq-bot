@@ -475,12 +475,8 @@ class ImageGenerator {
                     top: 50%;
                     left: 120px;
                     transform: translateY(-50%);
-                    background: rgba(255, 255, 255, 0.2);
-                    padding: 4px 8px;
-                    border-radius: var(--radius-md);
                     font-weight: 700;
                     font-size: 20px;
-                    backdrop-filter: blur(4px);
                 }
 
                 .decorate-bg {
@@ -1284,7 +1280,7 @@ class ImageGenerator {
 
         const authorName = module_author.name || 'Unknown';
         const authorFace = module_author.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg';
-        const pubTime = this.formatPubTime(data.data.pub_ts) || module_author.pub_time || '';
+        const pubTime = this.formatPubTime(data.data.pub_ts) || this.formatPubTime(module_author.pub_ts) || module_author.pub_time || '';
 
         // Author decoration
         const decorationCard = module_author.decoration_card || {};
