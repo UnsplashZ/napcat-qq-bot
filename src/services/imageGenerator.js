@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { generateUnifiedCSS, renderUnifiedTypeBadge, renderUnifiedHeader, renderUnifiedFooter, DESIGN_SYSTEM } = require('../utils/designSystem');
 
 // SVG Icons (Unified Style - Material Designish)
 const ICONS = {
@@ -342,135 +343,14 @@ class ImageGenerator {
     }
     
     _generateCss(colorData, viewport) {
-        const { currentType, badgeColor, badgeBg, badgeTextColor, badgeShadow, badgeBorder } = colorData;
-        const { minWidth, width } = viewport;
-
         // Load Custom Fonts
         const { css: customFontsCss, families: customFontFamilies } = this._getCustomFonts();
+        
+        // Generate Unified CSS
+        const baseCss = generateUnifiedCSS(colorData, viewport, { customFontsCss, customFontFamilies });
 
-        return `
+        return baseCss + `
             <style>
-                /* Custom Fonts */
-                ${customFontsCss}
-
-                /* Design Tokens */
-                :root {
-                    /* Palette - Light */
-                    --color-bg: #F5F7FA;
-                    --color-card-bg: rgba(255, 255, 255, 0.75);
-                    --color-text: #1A1A1A;
-                    --color-subtext: #5A5F66;
-                    --color-border: rgba(0, 0, 0, 0.08);
-                    --color-soft-bg: #F0F2F5;
-                    --color-soft-bg-2: #EDEFF3;
-
-                    /* Accent */
-                    --color-primary: ${currentType.color};
-                    --color-secondary: #00A1D6;
-                    --color-emphasis: #FF6699;
-
-                    /* Radii - Unified & Modern */
-                    --radius-sm: 6px;
-                    --radius-md: 10px;
-                    --radius-lg: 18px;
-
-                    /* Shadows */
-                    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-                    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.10);
-                    --shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.14);
-                }
-
-                /* Dark Theme Override */
-                .theme-dark {
-                    --color-bg: rgba(0, 0, 0, 0.9);
-                    --color-card-bg: rgba(23, 27, 33, 0.75);
-                    --color-text: #E8EAED;
-                    --color-subtext: #A8ADB4;
-                    --color-border: rgba(255, 255, 255, 0.08);
-                    --color-soft-bg: #12161B;
-                    --color-soft-bg-2: #0D1014;
-                    --color-primary: ${badgeColor};
-
-                    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.60);
-                    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.65);
-                    --shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.70);
-                }
-
-                body {
-                    margin: 0;
-                    padding: 0;
-                    background: transparent;
-                    width: fit-content;
-                    min-width: ${minWidth}px;
-                    max-width: ${width}px;
-                    font-family: ${customFontFamilies.length > 0 ? customFontFamilies.join(', ') + ', ' : ''}"MiSans", "MiSans L3", "Noto Sans SC", "Noto Color Emoji", sans-serif;
-                    -webkit-font-smoothing: antialiased;
-                    -moz-osx-font-smoothing: grayscale;
-                }
-
-                .container {
-                    padding: 24px;
-                    background: var(--color-bg);
-                    box-sizing: border-box;
-                    width: 100%;
-                    min-height: 300px;
-                    display: inline-flex;
-                    flex-direction: column;
-                    align-items: flex-start;
-                    border-radius: var(--radius-lg);
-                    transition: background-color .3s ease;
-                }
-
-                 .card {
-                     position: relative;
-                     background: var(--color-card-bg);
-                     border-radius: var(--radius-lg);
-                     overflow: hidden;
-                     box-shadow: var(--shadow-lg);
-                     border: 1px solid var(--color-border);
-                     transition: background-color .3s ease, box-shadow .3s ease, border-color .3s ease;
-                     backdrop-filter: blur(24px);
-                     -webkit-backdrop-filter: blur(24px);
-                 }
-                
-                .container.gradient-bg { position: relative; }
-                .container.gradient-bg::before {
-                    content: '';
-                    position: absolute;
-                    inset: 0;
-                    background: var(--gradient-mix);
-                    opacity: 0.18;
-                    z-index: 0;
-                }
-                @supports (backdrop-filter: blur(2px)) {
-                    .container.gradient-bg::before {
-                        backdrop-filter: blur(2px);
-                    }
-                }
-                .container.gradient-bg > * {
-                    position: relative;
-                    z-index: 1;
-                }
-
-                /* Type Badge - 更现代的设计 - 放大版 */
-                .type-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 12px;
-                    margin-bottom: 20px;
-                    margin-left: 6px;
-                    background: ${badgeBg};
-                    color: ${badgeTextColor};
-                    padding: 16px 28px;
-                    border-radius: var(--radius-lg);
-                    font-size: 28px;
-                    font-weight: 700;
-                    box-shadow: ${badgeShadow};
-                    border: ${badgeBorder};
-                    text-shadow: ${colorData.themeClass === 'theme-dark' ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.2)'};
-                    letter-spacing: 1px;
-                    line-height: 1;
-                }
 
                 .cover-container { position: relative; width: 100%; }
                 .cover { width: 100%; display: block; object-fit: cover; border-radius: var(--radius-lg); }
@@ -1880,34 +1760,25 @@ class ImageGenerator {
         
         const { css: customFontsCss, families: customFontFamilies } = this._getCustomFonts();
 
+        // Unified Design System Integration
+        const colorData = {
+            themeClass,
+            badgeColor: '#FB7299',
+            gradientMix: isNight ? 'linear-gradient(135deg, #1a1a1a 0%, #2c3e50 100%)' : 'linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%)',
+            currentType: { label: '订阅列表', color: '#FB7299', icon: '📋' }
+        };
+        const viewport = { width: 880, minWidth: 400 };
+        const baseCss = generateUnifiedCSS(colorData, viewport, { customFontsCss, customFontFamilies });
+        
+        // Type Badge (Optional)
+        // const typeBadgeHtml = renderUnifiedTypeBadge('subscription', '订阅列表', '📋', true);
+
         const html = `<!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
+            ${baseCss}
             <style>
-                ${customFontsCss}
-                :root {
-                    --bg-gradient: linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%);
-                    --card-bg: rgba(255, 255, 255, 0.75);
-                    --card-border: rgba(255, 255, 255, 0.9);
-                    --text-title: #333;
-                    --text-subtitle: #999;
-                    --border-color: #e3e5e7;
-                    --primary-color: #00AEEC;
-                    --accent-color: #FB7299;
-                    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-                    --text-main: #18191c;
-                }
-                .theme-dark {
-                    --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2c3e50 100%);
-                    --card-bg: rgba(23, 27, 33, 0.75);
-                    --card-border: rgba(255, 255, 255, 0.08);
-                    --text-title: #E8EAED;
-                    --text-subtitle: #A8ADB4;
-                    --border-color: #3d3d3d;
-                    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
-                    --text-main: #e0e0e0;
-                }
                 body {
                     margin: 0;
                     padding: 0;
@@ -1916,30 +1787,32 @@ class ImageGenerator {
                 }
                 #wrapper {
                     padding: 40px;
-                    background: var(--bg-gradient);
-                    border-radius: 20px;
+                    /* background: var(--bg-gradient); */
+                    border-radius: var(--radius-container);
                     width: 800px;
                     overflow: hidden;
+                    position: relative;
                 }
                 .container {
-                    background: var(--card-bg);
-                    border-radius: 20px;
+                    background: var(--color-card-bg);
+                    border-radius: var(--radius-container);
                     box-shadow: var(--shadow-card);
-                    border: 1px solid var(--card-border);
+                    border: 1px solid var(--color-border);
                     padding: 28px;
                     overflow: hidden;
                     backdrop-filter: blur(24px);
                     -webkit-backdrop-filter: blur(24px);
+                    position: relative;
                 }
                 .header {
                     text-align: center;
                     margin-bottom: 28px;
-                    border-bottom: 2px solid var(--border-color);
+                    border-bottom: 2px solid var(--color-border);
                     padding-bottom: 20px;
                 }
                 .header h1 {
                     margin: 0;
-                    font-size: 32px;
+                    font-size: var(--font-title);
                     background: linear-gradient(135deg, #FB7299, #FF6699);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
@@ -1952,7 +1825,7 @@ class ImageGenerator {
                 .section-title {
                     font-size: 20px;
                     font-weight: 700;
-                    color: var(--text-title);
+                    color: var(--color-text);
                     margin-bottom: 16px;
                     display: flex;
                     align-items: center;
@@ -1968,7 +1841,7 @@ class ImageGenerator {
                     box-shadow: 0 2px 8px rgba(0, 161, 214, 0.3);
                 }
                 .count-badge {
-                    background: var(--primary-color);
+                    background: var(--color-primary);
                     color: white;
                     font-size: 12px;
                     padding: 2px 8px;
@@ -1984,9 +1857,9 @@ class ImageGenerator {
                     display: flex;
                     align-items: center;
                     padding: 12px;
-                    background-color: ${isNight ? 'rgba(255,255,255,0.05)' : '#f9f9f9'};
+                    background-color: var(--color-soft-bg);
                     border-radius: 12px;
-                    border: 1px solid var(--border-color);
+                    border: 1px solid var(--color-border);
                     transition: all 0.2s;
                 }
                 .avatar-container {
@@ -2001,7 +1874,7 @@ class ImageGenerator {
                     height: 60px;
                     border-radius: 50%;
                     object-fit: cover;
-                    border: 2px solid var(--card-bg);
+                    border: 2px solid var(--color-card-bg);
                     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
                 }
                 .user-info {
@@ -2016,7 +1889,7 @@ class ImageGenerator {
                 .user-name {
                     font-size: 16px;
                     font-weight: bold;
-                    color: var(--text-main);
+                    color: var(--color-text);
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
@@ -2043,7 +1916,7 @@ class ImageGenerator {
                     flex-wrap: wrap;
                     gap: 8px;
                     font-size: 12px;
-                    color: var(--text-subtitle);
+                    color: var(--color-subtext);
                     align-items: center;
                 }
                 .uid {
@@ -2058,9 +1931,9 @@ class ImageGenerator {
                 }
                 .bangumi-card {
                     padding: 12px;
-                    background-color: ${isNight ? 'rgba(255,255,255,0.05)' : '#f9f9f9'};
+                    background-color: var(--color-soft-bg);
                     border-radius: 12px;
-                    border: 1px solid var(--border-color);
+                    border: 1px solid var(--color-border);
                     display: flex;
                     align-items: center;
                 }
@@ -2071,7 +1944,7 @@ class ImageGenerator {
                 .bangumi-title {
                     font-size: 14px;
                     font-weight: 500;
-                    color: var(--text-main);
+                    color: var(--color-text);
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
@@ -2079,7 +1952,7 @@ class ImageGenerator {
                 
                 .empty-tip {
                     text-align: center;
-                    color: var(--text-subtitle);
+                    color: var(--color-subtext);
                     padding: 20px;
                     font-style: italic;
                     background: rgba(0,0,0,0.02);
@@ -2088,11 +1961,11 @@ class ImageGenerator {
             </style>
         </head>
         <body class="${themeClass}">
-            <div id="wrapper">
+            <div id="wrapper" style="background: ${colorData.gradientMix}">
                 <div class="container">
-                <div class="header">
-                    <h1>${title}</h1>
-                </div>
+                    <div class="header">
+                        <h1>${title}</h1>
+                    </div>
 
                 <div class="section">
                     <div class="section-title">
@@ -2236,15 +2109,23 @@ class ImageGenerator {
 
         const { css: customFontsCss, families: customFontFamilies } = this._getCustomFonts();
 
+        // Unified Design System Integration
+        const colorData = {
+            themeClass,
+            badgeColor: '#FB7299',
+            gradientMix: isNight ? 'linear-gradient(135deg, #1a1a1a 0%, #2c3e50 100%)' : 'linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%)',
+            currentType: { label: '使用帮助', color: '#FB7299', icon: '💡' }
+        };
+        const viewport = { width: 1000, minWidth: 400 };
+        const baseCss = generateUnifiedCSS(colorData, viewport, { customFontsCss, customFontFamilies });
+        
+        // Type Badge (Optional)
+        // const typeBadgeHtml = renderUnifiedTypeBadge('help', '使用帮助', '💡', true);
+
         const style = `
+            ${baseCss}
             <style>
-                ${customFontsCss}
                 :root {
-                    --bg-gradient: linear-gradient(135deg, #fef5f6 0%, #e8f5ff 50%, #f0f9ff 100%);
-                    --card-bg: rgba(255, 255, 255, 0.75);
-                    --card-border: rgba(255, 255, 255, 0.9);
-                    --text-title: #333;
-                    --text-subtitle: #999;
                     --link-bg: linear-gradient(135deg, #f8f9fa 0%, #f4f6f8 100%);
                     --link-text: #555;
                     --cmd-item-bg: #fff;
@@ -2253,51 +2134,39 @@ class ImageGenerator {
                     --cmd-code-color: #FB7299;
                     --cmd-desc: #666;
                     --footer-text: #bbb;
-                    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
                 }
 
                 .theme-dark {
-                    --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2c3e50 100%);
-                    --card-bg: rgba(23, 27, 33, 0.75);
-                    --card-border: rgba(255, 255, 255, 0.08);
-                    --text-title: #E8EAED;
-                    --text-subtitle: #A8ADB4;
                     --link-bg: #12161B;
-                    --link-text: #A8ADB4;
+                    --link-text: #D1D5DB;
                     --cmd-item-bg: #12161B;
                     --cmd-item-border: rgba(255, 255, 255, 0.08);
                     --cmd-code-bg: rgba(251, 114, 153, 0.15);
                     --cmd-code-color: #FF6699;
-                    --cmd-desc: #888;
-                    --footer-text: #666;
-                    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+                    --cmd-desc: #B0B3B8;
+                    --footer-text: #8A8F99;
                 }
 
                 body {
-                    margin: 0;
-                    padding: 0;
-                    background: transparent;
                     width: 1000px;
                     font-family: ${customFontFamilies.length > 0 ? customFontFamilies.join(', ') + ', ' : ''}"MiSans", "MiSans L3", "Noto Sans SC", "Noto Color Emoji", sans-serif;
-                    -webkit-font-smoothing: antialiased;
-                    -moz-osx-font-smoothing: grayscale;
                 }
 
                 .container {
                     padding: 24px;
-                    background: var(--bg-gradient);
+                    /* background: var(--bg-gradient); */
                     box-sizing: border-box;
                     width: 100%;
                     display: inline-block;
-                    border-radius: 20px;
+                    border-radius: var(--radius-container);
                 }
 
                 .card {
-                    background: var(--card-bg);
-                    border-radius: 20px;
+                    background: var(--color-card-bg);
+                    border-radius: var(--radius-container);
                     overflow: hidden;
                     box-shadow: var(--shadow-card);
-                    border: 1px solid var(--card-border);
+                    border: 1px solid var(--color-border);
                     padding: 28px;
                     backdrop-filter: blur(24px);
                     -webkit-backdrop-filter: blur(24px);
@@ -2311,7 +2180,7 @@ class ImageGenerator {
                 }
 
                 .title {
-                    font-size: 36px;
+                    font-size: var(--font-title);
                     font-weight: 800;
                     background: linear-gradient(135deg, #FB7299, #FF6699);
                     -webkit-background-clip: text;
@@ -2323,7 +2192,7 @@ class ImageGenerator {
 
                 .subtitle {
                     font-size: 22px;
-                    color: var(--text-subtitle);
+                    color: var(--color-subtext);
                     font-weight: 500;
                 }
 
@@ -2334,7 +2203,7 @@ class ImageGenerator {
                 .section-title {
                     font-size: 26px;
                     font-weight: 700;
-                    color: var(--text-title);
+                    color: var(--color-text);
                     margin-bottom: 16px;
                     display: flex;
                     align-items: center;
@@ -2514,7 +2383,7 @@ class ImageGenerator {
                     </div>
                 </div>
                 
-                <div class="footer" style="margin-top: 20px; font-weight: bold; color: var(--text-subtitle); display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                <div class="footer" style="margin-top: 20px; font-weight: bold; color: var(--color-subtext); display: flex; flex-direction: column; align-items: center; gap: 8px;">
                     <div>管理员请发送 <span style="font-family: monospace; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px;">/设置 帮助</span> 查看管理面板</div>
                 </div>
             `;
@@ -2596,8 +2465,14 @@ class ImageGenerator {
             `;
         }
 
-        const html = `<html><head>${style}</head><body>
-            <div class="container ${themeClass}">
+        const html = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            ${style}
+        </head>
+        <body class="${themeClass}">
+            <div class="container" style="background: ${colorData.gradientMix}">
                 <div class="card">
                     <div class="header">
                         <div class="title">${title}</div>
@@ -2612,7 +2487,8 @@ class ImageGenerator {
                     </div>
                 </div>
             </div>
-        </body></html>`;
+        </body>
+        </html>`;
 
         await page.setContent(html);
         const container = await page.$('.container');

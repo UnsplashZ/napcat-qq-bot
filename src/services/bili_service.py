@@ -194,9 +194,12 @@ async def get_opus_detail(opus_id):
     try:
         o = opus.Opus(int(opus_id), credential=load_credential())
         if await o.is_article():
-            return await get_article_info(opus_id)
-        else:
-            return await get_dynamic_detail(opus_id)
+            result = await get_article_info(opus_id)
+            if result.get('status') == 'success':
+                return result
+            # If article fetch fails (e.g. 404), fallback to dynamic detail
+            
+        return await get_dynamic_detail(opus_id)
     except Exception as e:
         import traceback
         traceback.print_exc()
