@@ -15,7 +15,8 @@ async function generateSubscriptionList(data, groupId, show_id = true, title = '
     await browserManager.init();
     const page = await browserManager.createPage({ width: 880, height: 1000, deviceScaleFactor: 2 });
 
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    try {
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     const isNight = isNightMode(groupId);
     const themeClass = isNight ? 'theme-dark' : 'theme-light';
@@ -310,8 +311,13 @@ async function generateSubscriptionList(data, groupId, show_id = true, title = '
         omitBackground: true
     });
 
-    await page.close();
-    return buffer.toString('base64');
+        return buffer.toString('base64');
+    } catch (error) {
+        throw error;
+    } finally {
+        // 确保页面在任何情况下都会被关闭
+        await browserManager.closePage(page);
+    }
 }
 
 module.exports = { generateSubscriptionList };

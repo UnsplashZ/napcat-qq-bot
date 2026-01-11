@@ -17,9 +17,10 @@ async function generateHelpCard(type = 'user', groupId) {
         deviceScaleFactor: 1.5
     });
 
-    // Theme: auto switch by config
-    const isNight = isNightMode(groupId);
-    const themeClass = isNight ? 'theme-dark' : 'theme-light';
+    try {
+        // Theme: auto switch by config
+        const isNight = isNightMode(groupId);
+        const themeClass = isNight ? 'theme-dark' : 'theme-light';
 
     const { css: customFontsCss, families: customFontFamilies } = getCustomFonts();
 
@@ -408,9 +409,13 @@ async function generateHelpCard(type = 'user', groupId) {
         omitBackground: true
     });
 
-    await page.close();
-
-    return buffer.toString('base64');
+        return buffer.toString('base64');
+    } catch (error) {
+        throw error;
+    } finally {
+        // 确保页面在任何情况下都会被关闭
+        await browserManager.closePage(page);
+    }
 }
 
 module.exports = { generateHelpCard };

@@ -85,6 +85,22 @@ class ImageGenerator {
     formatNumber(num) {
         return formatNumber(num);
     }
+
+    /**
+     * 清理所有资源（用于程序退出时）
+     * @returns {Promise<void>}
+     */
+    async cleanup() {
+        await browserManager.cleanup();
+    }
+
+    /**
+     * 获取页面池统计信息
+     * @returns {Object} 统计信息
+     */
+    getPoolStats() {
+        return browserManager.getPoolStats();
+    }
 }
 
 // 导出单例实例，保持与原文件完全一致的导出方式

@@ -53,7 +53,8 @@ async function generatePreviewCard(data, type, groupId, show_id = true) {
     await browserManager.init();
     const page = await browserManager.createPage({ width: 1200, height: 1200, deviceScaleFactor: 1.1 });
 
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    try {
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     // Logic extraction
     const viewport = calculateViewport(type, data);
@@ -95,7 +96,7 @@ async function generatePreviewCard(data, type, groupId, show_id = true) {
         </div>
     </body></html>`;
 
-    await page.setContent(fullHtml, { waitUntil: 'domcontentloaded', timeout: 0 });
+    await page.setContent(fullHtml, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForSelector('.container', { timeout: 5000 });
     await new Promise(r => setTimeout(r, 300));
     const container = await page.$('.container');
@@ -104,8 +105,13 @@ async function generatePreviewCard(data, type, groupId, show_id = true) {
         omitBackground: true
     });
 
-    await page.close();
-    return buffer.toString('base64');
+        return buffer.toString('base64');
+    } catch (error) {
+        throw error;
+    } finally {
+        // 确保页面在任何情况下都会被关闭
+        await browserManager.closePage(page);
+    }
 }
 
 module.exports = { generatePreviewCard };

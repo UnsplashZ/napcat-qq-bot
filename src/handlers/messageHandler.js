@@ -4,6 +4,7 @@ const aiHandler = require('./aiHandler');
 const logger = require('../utils/logger');
 const QRCode = require('qrcode');
 const subscriptionService = require('../services/subscriptionService');
+const notificationService = require('../services/notificationService');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -81,21 +82,18 @@ class MessageHandler {
     isLinkCached(cacheKey) {
         if (this.linkCache.has(cacheKey)) {
             const cachedTime = this.linkCache.get(cacheKey);
-            
+
             // Parse groupId from cacheKey: type_id_groupId
-            // Note: id might contain underscores? Regex used in extractLinks ensures id is captured.
-            // But cacheKey construction: `${linkType.type}_${id}_${groupId}`
-            // Let's split by _. type is safe. id is usually safe. groupId is safe.
-            // But id might have special chars? Bilibili IDs are alphanumeric.
-            const parts = cacheKey.split('_');
-            const groupId = parts.length >= 3 ? parts[parts.length - 1] : null;
+            // Use lastIndexOf to safely extract groupId even if id contains underscores
+            const lastUnderscoreIndex = cacheKey.lastIndexOf('_');
+            const groupId = lastUnderscoreIndex !== -1 ? cacheKey.substring(lastUnderscoreIndex + 1) : null;
 
             // Get timeout for this group
             const timeoutSeconds = config.getGroupConfig(groupId, 'linkCacheTimeout');
             const timeout = (timeoutSeconds || 300) * 1000;
 
             if (Date.now() - cachedTime < timeout) {
-                logger.info(`链接 ${cacheKey} 在缓存期内，跳过处理`);
+                logger.info(`[MessageHandler] 链接 ${cacheKey} 在缓存期内，跳过处理`);
                 return true;
             } else {
                 // 缓存已过期，删除它
@@ -115,9 +113,10 @@ class MessageHandler {
     cleanupExpiredCache() {
         const now = Date.now();
         for (const [key, time] of this.linkCache.entries()) {
-            const parts = key.split('_');
-            const groupId = parts.length >= 3 ? parts[parts.length - 1] : null;
-            
+            // Use lastIndexOf to safely extract groupId even if id contains underscores
+            const lastUnderscoreIndex = key.lastIndexOf('_');
+            const groupId = lastUnderscoreIndex !== -1 ? key.substring(lastUnderscoreIndex + 1) : null;
+
             const timeoutSeconds = config.getGroupConfig(groupId, 'linkCacheTimeout');
             const timeout = (timeoutSeconds || 300) * 1000;
 
@@ -515,13 +514,13 @@ class MessageHandler {
 
                     // 2. Fetch Subscriptions & Followings
                     const subs = subscriptionService.getSubscriptionsByGroup(groupId);
-                    
+
                     // Get Account Follows (merged view)
                     let followings = [];
                     try {
                          followings = subscriptionService.cookieFollowings || [];
                     } catch (e) {
-                         logger.error('Error fetching followings for merge view:', e);
+                         logger.error('\[MessageHandler\] Error fetching followings for merge view:', e);
                     }
 
                     if (subs.length === 0 && followings.length === 0) {
@@ -535,7 +534,7 @@ class MessageHandler {
                     // Fetch user details for Group Subs (with concurrency limit and lightweight API)
                     const detailedUserSubs = [];
                     const CONCURRENCY_LIMIT = 3; // Limit parallel requests to avoid rate limits
-                    
+
                     for (let i = 0; i < userSubs.length; i += CONCURRENCY_LIMIT) {
                          const chunk = userSubs.slice(i, i + CONCURRENCY_LIMIT);
                          const chunkResults = await Promise.all(chunk.map(async (sub) => {
@@ -543,10 +542,10 @@ class MessageHandler {
                                 // Use lighter getUserCard instead of full getUserInfo
                                 const info = await biliApi.getUserCard(sub.uid);
                                 if (info && info.status === 'success' && info.data) {
-                                    logger.info(`[DebugAvatar] Fetched card for ${sub.uid}: face=${info.data.face}`);
+                                    logger.info(`[MessageHandler] Fetched card for ${sub.uid}: face=${info.data.face}`);
                                     return {
                                         ...sub,
-                                        name: info.data.name || sub.name, 
+                                        name: info.data.name || sub.name,
                                         face: info.data.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg',
                                         level: 0,
                                         pendant: {},
@@ -554,7 +553,7 @@ class MessageHandler {
                                     };
                                 }
                             } catch (e) {
-                                logger.error(`Failed to fetch card for user ${sub.uid}`, e);
+                                logger.error(`[MessageHandler] Failed to fetch card for user ${sub.uid}`, e);
                             }
                             return {
                                 ...sub,
@@ -574,10 +573,10 @@ class MessageHandler {
                     };
 
                     const showId = config.getGroupConfig(groupId, 'showId');
-                    
+
                     const enableSync = config.getGroupConfig(groupId, 'enableCookieSync');
                     const syncGroup = config.getGroupConfig(groupId, 'cookieSyncGroupName');
-                    
+
                     if (!enableSync) {
                         data.accountFollows = [];
                         data.accountFollowsTitle = '';
@@ -597,7 +596,7 @@ class MessageHandler {
                     this.sendGroupMessage(ws, groupId, [{ type: 'image', data: { file: `base64://${base64Image}` } }]);
 
                 } catch (e) {
-                    logger.error('Error generating subscription list image:', e);
+                    logger.error('[MessageHandler] Error generating subscription list image:', e);
                     // Fallback to text
                     let message = '生成图片失败，显示文本列表：\n';
                     if (userSubs.length) {
@@ -614,7 +613,9 @@ class MessageHandler {
                     }
                     this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: message } }]);
                 }
-            })();
+            })().catch(e => {
+                logger.error('[MessageHandler] Unhandled error in /订阅列表 async handler:', e);
+            });
             return;
         }
 
@@ -675,10 +676,12 @@ class MessageHandler {
                         const name = await subscriptionService.addUserSubscription(uid, groupId);
                         this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `成功订阅用户 ${name}（动态+直播）。` } }]);
                     } catch (e) {
-                         logger.error('Error adding user subscription:', e);
+                         logger.error('[MessageHandler] Error adding user subscription:', e);
                          this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: `订阅失败，请稍后重试。` } }]);
                     }
-                })();
+                })().catch(e => {
+                    logger.error('[MessageHandler] Unhandled error in /订阅用户 async handler:', e);
+                });
             } else {
                 this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅用户 <uid>' } }]);
             }
@@ -727,10 +730,12 @@ class MessageHandler {
                             this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅番剧 <season_id | md链接 | ep链接 | md123 | ep123>' } }]);
                         }
                     } catch (e) {
-                        logger.error('订阅番剧解析失败:', e);
+                        logger.error('[MessageHandler] 订阅番剧解析失败:', e);
                         this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '订阅失败：无法解析参数，请使用 season_id、md 或 ep 链接。' } }]);
                     }
-                })();
+                })().catch(e => {
+                    logger.error('[MessageHandler] Unhandled error in /订阅番剧 async handler:', e);
+                });
             } else {
                 this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '使用方法: /订阅番剧 <season_id | md链接 | ep链接 | md123 | ep123>' } }]);
             }
@@ -802,7 +807,7 @@ class MessageHandler {
                 const base64Image = await imageGenerator.generateHelpCard('user', groupId);
                 this.sendGroupMessage(ws, groupId, [{ type: 'image', data: { file: `base64://${base64Image}` } }]);
             } catch (e) {
-                logger.error('Error generating help card:', e);
+                logger.error('[MessageHandler] Error generating help card:', e);
                 this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: 'Help menu generation failed.' } }]);
             }
             return;
@@ -833,7 +838,7 @@ class MessageHandler {
                     const base64Image = await imageGenerator.generateHelpCard('admin', groupId);
                     this.sendGroupMessage(ws, groupId, [{ type: 'image', data: { file: `base64://${base64Image}` } }]);
                 } catch (e) {
-                    logger.error('Error generating admin help card:', e);
+                    logger.error('[MessageHandler] Error generating admin help card:', e);
                     this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: 'Admin menu generation failed.' } }]);
                 }
                 return;
@@ -890,7 +895,7 @@ class MessageHandler {
                         this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '获取登录URL失败。' } }]);
                     }
                 } catch (e) {
-                    logger.error('登录错误:', e);
+                    logger.error('[MessageHandler] 登录错误:', e);
                     this.sendGroupMessage(ws, groupId, [{ type: 'text', data: { text: '登录错误，请检查日志。' } }]);
                 }
                 return;
@@ -1425,131 +1430,16 @@ class MessageHandler {
 
     // 将base64图片保存为临时文件并返回文件路径
     saveImageAsFile(base64Data) {
-        try {
-            // 使用共享目录，确保npm运行的bot和docker运行的napcat都能访问
-            const hostTempDir = config.napcatTempPath; // Bot 写入的路径 (容器内或宿主机)
-            const containerTempDir = config.napcatReadPath; // NapCat 读取的路径 (NapCat 容器内)
-
-            // 确保目录存在
-            if (!fs.existsSync(hostTempDir)) {
-                fs.mkdirSync(hostTempDir, { recursive: true });
-                logger.info(`[MessageHandler] Created temp directory: ${hostTempDir}`);
-            }
-
-            // 生成唯一的文件名
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.png`;
-            const hostFilePath = path.join(hostTempDir, fileName); // 宿主机上的完整路径
-            const containerFilePath = path.join(containerTempDir, fileName); // 容器内的路径
-
-            // 将base64数据写入宿主机文件
-            const imageBuffer = Buffer.from(base64Data, 'base64');
-
-            // 检查图片大小（以MB为单位）
-            const imageSizeMB = imageBuffer.length / (1024 * 1024);
-            logger.info(`[MessageHandler] Image size: ${imageSizeMB.toFixed(2)} MB`);
-
-            // 如果图片超过10MB，记录警告
-            if (imageSizeMB > 10) {
-                logger.warn(`[MessageHandler] Large image detected (${imageSizeMB.toFixed(2)} MB), may fail to send`);
-            }
-
-            fs.writeFileSync(hostFilePath, imageBuffer);
-            logger.info(`[MessageHandler] Saved image to: ${hostFilePath} (size: ${imageSizeMB.toFixed(2)} MB)`);
-
-            // 返回容器内的路径，这样napcat可以访问
-            return containerFilePath;
-        } catch (e) {
-            logger.error('[MessageHandler] Error saving image file:', e);
-            throw e;
-        }
+        return notificationService.saveImageAsFile(base64Data, 'MessageHandler');
     }
 
     // 清理文本,移除可能导致编码问题的字符
     cleanText(text) {
-        if (typeof text !== 'string') return text;
-
-        try {
-            // 移除零宽字符和其他可能导致问题的Unicode字符
-            let cleaned = text
-                .replace(/[\u200B-\u200D\uFEFF]/g, '') // 零宽字符
-                .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '') // 控制字符
-                .replace(/\uFFFD/g, ''); // 替换字符
-
-            // 确保文本是有效的UTF-8
-            // 尝试编码和解码来验证
-            Buffer.from(cleaned, 'utf8');
-
-            return cleaned;
-        } catch (e) {
-            logger.warn('[MessageHandler] Text cleaning failed, using original:', e);
-            return text;
-        }
+        return notificationService.cleanText(text);
     }
 
     sendGroupMessage(ws, groupId, messageChain) {
-        try {
-            // 处理图片消息，将base64图片转换为文件路径
-            // 同时清理文本消息
-            const processedMessageChain = messageChain.map(item => {
-                if (item.type === 'image' && item.data.file && item.data.file.startsWith('base64://')) {
-                    // 如果配置了直接发送 Base64，则不做转换
-                    if (config.useBase64Send) {
-                        return item;
-                    }
-
-                    const base64Data = item.data.file.substring(9); // 移除 'base64://' 前缀
-                    const imagePath = this.saveImageAsFile(base64Data);
-                    // 返回文件路径格式，让NapCat直接发送原图
-                    return {
-                        type: 'image',
-                        data: {
-                            file: `file://${imagePath}`
-                        }
-                    };
-                } else if (item.type === 'text' && item.data.text) {
-                    // 清理文本
-                    return {
-                        type: 'text',
-                        data: {
-                            text: this.cleanText(item.data.text)
-                        }
-                    };
-                }
-                return item;
-            });
-
-            const payload = {
-                action: 'send_group_msg',
-                params: {
-                    group_id: groupId,
-                    message: processedMessageChain
-                }
-            };
-
-            logger.info(`[MessageHandler] Sending message to group ${groupId}, chain length: ${processedMessageChain.length}`);
-            logger.debug('[MessageHandler] Sending payload:', JSON.stringify(payload, null, 2).substring(0, 500)); // Debug log
-
-            ws.send(JSON.stringify(payload));
-            logger.info(`[MessageHandler] Message sent successfully to group ${groupId}`);
-        } catch (e) {
-            logger.error('[MessageHandler] Error sending group message:', e);
-            logger.error('[MessageHandler] Error stack:', e.stack);
-            logger.error('[MessageHandler] Failed message chain:', JSON.stringify(messageChain, null, 2).substring(0, 500));
-
-            // 尝试发送简化的错误通知
-            try {
-                const fallbackPayload = {
-                    action: 'send_group_msg',
-                    params: {
-                        group_id: groupId,
-                        message: [{ type: 'text', data: { text: '消息发送失败，请查看日志' } }]
-                    }
-                };
-                ws.send(JSON.stringify(fallbackPayload));
-            } catch (fallbackError) {
-                logger.error('[MessageHandler] Fallback message also failed:', fallbackError);
-            }
-        }
+        notificationService.sendGroupMessage(ws, groupId, messageChain, 'MessageHandler', true);
     }
 
     async handleGroupIncrease(ws, payload) {

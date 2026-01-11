@@ -7,13 +7,15 @@ class BiliApi {
     constructor() {
         this.pythonPath = config.pythonPath;
         this.scriptPath = config.biliScriptPath;
+        this.retryDelay = 10000; // 10秒重试延迟
+        this.maxRetries = 1; // 最多重试1次
     }
 
     async runCommand(command, args = []) {
         return new Promise((resolve, reject) => {
             const processArgs = [this.scriptPath, command, ...args];
             const pythonProcess = spawn(this.pythonPath, processArgs);
-            
+
             const chunks = [];
             let errorString = '';
 
@@ -52,7 +54,7 @@ class BiliApi {
                     reject(e);
                 }
             });
-            
+
             pythonProcess.on('error', (err) => {
                 clearTimeout(timeout);
                 reject(err);
@@ -60,12 +62,42 @@ class BiliApi {
         });
     }
 
-    async getVideoInfo(bvid) {
-        return this.runCommand('video', [bvid]);
+    /**
+     * 带重试机制的命令执行
+     * @param {string} command - 命令名称
+     * @param {Array} args - 命令参数
+     * @param {number} retryCount - 当前重试次数（内部使用）
+     * @returns {Promise} 执行结果
+     */
+    async runCommandWithRetry(command, args = [], retryCount = 0) {
+        try {
+            logger.debug(`Executing command: ${command} (attempt ${retryCount + 1}/${this.maxRetries + 1})`);
+            const result = await this.runCommand(command, args);
+
+            // 成功执行，返回结果
+            if (retryCount > 0) {
+                logger.info(`Command ${command} succeeded after ${retryCount} retry(ies)`);
+            }
+            return result;
+        } catch (error) {
+            // 如果还有重试机会
+            if (retryCount < this.maxRetries) {
+                logger.warn(`Command ${command} failed (attempt ${retryCount + 1}/${this.maxRetries + 1}): ${error.message}`);
+                logger.info(`Retrying in ${this.retryDelay / 1000} seconds...`);
+
+                // 等待后重试
+                await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                return this.runCommandWithRetry(command, args, retryCount + 1);
+            } else {
+                // 已达到最大重试次数，记录错误并抛出
+                logger.error(`Command ${command} failed after ${this.maxRetries + 1} attempts: ${error.message}`);
+                throw error;
+            }
+        }
     }
 
-    async getBangumiInfo(seasonId) {
-        return this.runCommand('bangumi', [seasonId]);
+    async getVideoInfo(bvid) {
+        return this.runCommand('video', [bvid]);
     }
 
     async getLoginUrl() {
@@ -77,23 +109,27 @@ class BiliApi {
     }
 
     async getUserDynamic(uid) {
-        return this.runCommand('user_dynamic', [uid]);
+        return this.runCommandWithRetry('user_dynamic', [uid]);
     }
 
     async getUserLive(uid) {
-        return this.runCommand('user_live', [uid]);
+        return this.runCommandWithRetry('user_live', [uid]);
     }
 
     async getDynamicInfo(dynamicId) {
-        return this.runCommand('dynamic_detail', [dynamicId]);
+        return this.runCommandWithRetry('dynamic_detail', [dynamicId]);
     }
 
     async getArticleInfo(cvid) {
         return this.runCommand('article', [cvid]);
     }
 
+    async getBangumiInfo(seasonId) {
+        return this.runCommandWithRetry('bangumi', [seasonId]);
+    }
+
     async getLiveRoomInfo(roomId) {
-        return this.runCommand('live_room', [roomId]);
+        return this.runCommandWithRetry('live_room', [roomId]);
     }
 
     async getOpusInfo(opusId) {
@@ -101,7 +137,7 @@ class BiliApi {
     }
 
     async getUserInfo(uid) {
-        return this.runCommand('user_info', [uid]);
+        return this.runCommandWithRetry('user_info', [uid]);
     }
 
     async getUserCard(uid) {
@@ -118,7 +154,7 @@ class BiliApi {
 
     async getMyFollowings(groupName) {
         const args = groupName ? [groupName] : [];
-        return this.runCommand('my_followings', args);
+        return this.runCommandWithRetry('my_followings', args);
     }
 }
 
