@@ -307,7 +307,23 @@ wget -O setup.sh https://gh-proxy.org/https://raw.githubusercontent.com/Unsplash
         *   `aiHandler.js`: AI 对话、RAG 检索、上下文管理
     *   `services/`: B站 API, 绘图服务, 订阅服务
         *   `biliApi.js`: Bilibili API 调用 (通过 Python 子进程)
-        *   `imageGenerator.js`: Puppeteer 图片生成服务
+        *   `imageGenerator/`: **Puppeteer 图片生成服务** (模块化架构，17 个文件)
+            *   `index.js`: 主入口，导出单例 ImageGenerator 类
+            *   `core/`: 核心模块
+                *   `browser.js`: Puppeteer 浏览器管理 (单例模式)
+                *   `theme.js`: 主题系统 (深色/浅色模式，配色计算)
+                *   `formatters.js`: 格式化工具 (时间、数字、HTML 转义)
+            *   `renderers/`: 内容渲染器 (纯函数，HTML 生成)
+                *   `video.js`, `bangumi.js`, `article.js`, `live.js`, `user.js`, `dynamic.js`: 各类型内容渲染
+                *   `icons.js`: SVG 图标常量
+                *   `components/`: 可复用组件
+                    *   `richtext.js`: 富文本解析 (@用户、表情、话题)
+                    *   `vote.js`: 投票卡片组件
+                    *   `media.js`: 媒体 (图片/视频) 组件
+            *   `generators/`: 图片生成器 (整合渲染器与浏览器)
+                *   `previewCard.js`: 预览卡片生成 (6 种内容类型)
+                *   `subscriptionList.js`: 订阅列表生成
+                *   `helpCard.js`: 帮助卡片生成 (用户/管理员菜单)
         *   `subscriptionService.js`: 订阅轮询与推送系统
         *   `vectorMemoryService.js`: 向量嵌入与相似度检索
     *   `utils/`: 工具函数
